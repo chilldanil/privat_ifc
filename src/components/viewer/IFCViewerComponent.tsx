@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, Suspense } from "react";
+import { useNavigate } from "react-router-dom";
 import * as OBC from "@thatopen/components";
 import * as OBCF from "@thatopen/components-front";
 import * as THREE from "three";
-import "./IFCViewerComponent.css";
+import "../../styles/IFCViewerComponent.css";
 
 // --------------------------------------------------
 // 🔌  Extended types for convenience
@@ -55,6 +56,7 @@ const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ properties, onClose }
 // 🎬  Main React component
 // --------------------------------------------------
 const IFCViewerComponent: React.FC = () => {
+  const navigate = useNavigate();
   // ---------- refs & state ----------
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -228,6 +230,12 @@ const IFCViewerComponent: React.FC = () => {
     <div className="ifc-viewer-container">
       {/* Toolbar */}
       <div className="ifc-controls">
+        <button 
+          className="back-button"
+          onClick={() => navigate('/')}
+        >
+          Back to Home
+        </button>
         <div className="file-input-container">
           <button className="file-input-button">Upload IFC File</button>
           <input

@@ -123,7 +123,25 @@
     color: white;
     pointer-events: none;
     z-index: 100;
-} 
+}
+
+.back-button {
+    padding: 8px 16px;
+    background: linear-gradient(45deg, #00c6ff, #0072ff);
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 14px;
+    margin-right: 16px;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.back-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 198, 255, 0.3);
+}
+
 /* ---------- existing styles (unchanged) ---------- */
 .ifc-viewer-container {
     width: 100%;

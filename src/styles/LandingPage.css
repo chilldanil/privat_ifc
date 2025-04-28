@@ -1,1 +1,82 @@
- 
+/* LandingPage.css */
+.landing-container {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 100vh;
+  padding: 0 1rem;
+  background: url('/hero-bg.jpg') center center/cover no-repeat;
+  position: relative;
+  color: #fff;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.landing-container::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 1;
+}
+
+.landing-content {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  max-width: 600px;
+  width: 100%;
+  padding: 2rem;
+}
+
+.landing-content h1 {
+  font-size: 3rem;
+  margin-bottom: 1rem;
+  letter-spacing: 1px;
+}
+
+.landing-content p {
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  line-height: 1.5;
+}
+
+.viewer-button {
+  display: inline-block;
+  padding: 0.75rem 2rem;
+  background-color: #ffdc00;
+  color: #000;
+  font-size: 1.125rem;
+  font-weight: bold;
+  border: none;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  text-transform: uppercase;
+  transition: background-color 0.3s, transform 0.2s;
+  box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+}
+
+.viewer-button:hover {
+  background-color: #e6c200;
+  transform: translateY(-2px);
+}
+
+.viewer-button:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(255,220,0,0.6);
+}
+
+@media (max-width: 600px) {
+  .landing-content h1 {
+    font-size: 2.2rem;
+  }
+  .landing-content p {
+    font-size: 1rem;
+  }
+  .viewer-button {
+    width: 100%;
+    padding: 0.75rem;
+  }
+} 

@@ -56,7 +56,7 @@ const TreeItem: React.FC<{
         <div className="tree-item-children">
           {node.children.map(child => (
             <TreeItem 
-              key={child.id} 
+              key={`${child.id}-${child.name}`} 
               node={child} 
               onSelectItem={onSelectItem} 
               level={level + 1} 
@@ -75,7 +75,7 @@ const TreeView: React.FC<TreeViewProps> = ({ data, onSelectItem }) => {
       <div className="tree-container">
         {data.map(node => (
           <TreeItem 
-            key={node.id} 
+            key={`${node.id}-${node.name}`} 
             node={node} 
             onSelectItem={onSelectItem} 
             level={0} 

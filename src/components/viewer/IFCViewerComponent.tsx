@@ -68,6 +68,7 @@ const IFCViewerComponent: React.FC = () => {
     /* highlighter & outliner */
     const h = components.get(OBCF.Highlighter);
     h.setup({ world: w });
+    h.add('selection', new THREE.Color(0xffdc00));
     h.zoomToSelection = true;
     highlighter.current = h;
 

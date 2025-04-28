@@ -160,6 +160,12 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
   );
 };
 
+// helper just above convertClassifierToTree
+const safeNumber = (value: string): number | undefined => {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : undefined;
+};
+
 // Function to convert classifier data to TreeNode structure
 function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
   const result: TreeNode[] = [];
@@ -189,7 +195,10 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
           // Add children if available
           if (level.children) {
             for (const [childID, childLevel] of Object.entries(level.children)) {
-              node.children.push(buildNode(childLevel, parseInt(childID)));
+              const childExpressID = safeNumber(childID);
+              if (childExpressID !== undefined) {
+                node.children.push(buildNode(childLevel, childExpressID));
+              }
             }
           }
           
@@ -198,7 +207,10 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
         
         // Start with the root level (usually project)
         for (const [expressID, level] of Object.entries(structure)) {
-          result.push(buildNode(level, parseInt(expressID)));
+          const rootExpressID = safeNumber(expressID);
+          if (rootExpressID !== undefined) {
+            result.push(buildNode(level, rootExpressID));
+          }
         }
       }
     } catch (error) {

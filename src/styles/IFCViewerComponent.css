@@ -355,3 +355,89 @@
     border-radius: 3px;
   }
   
+  /* Face Measurement Panel */
+  .face-measurement-panel {
+    position: absolute;
+    top: 20px;
+    right: 20px;
+    width: 300px;
+    background-color: rgba(255, 255, 255, 0.95);
+    border-radius: 8px;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+    padding: 15px;
+    z-index: 100;
+    max-height: 70vh;
+    overflow-y: auto;
+    transition: transform 0.3s, opacity 0.3s;
+  }
+  
+  .face-measurement-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+    padding-bottom: 10px;
+  }
+  
+  .face-measurement-title h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  
+  .face-measurement-title button {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 18px;
+    color: #666;
+  }
+  
+  .face-measurement-title button:hover {
+    color: #000;
+  }
+  
+  .face-measurement-section {
+    margin-bottom: 15px;
+  }
+  
+  .face-measurement-section h4 {
+    margin: 0 0 8px 0;
+    font-size: 14px;
+    font-weight: 600;
+    color: #555;
+  }
+  
+  .measurement-item {
+    display: flex;
+    justify-content: space-between;
+    padding: 4px 0;
+    font-size: 13px;
+    border-bottom: 1px dashed #eee;
+  }
+  
+  .measurement-label {
+    color: #666;
+  }
+  
+  .measurement-value {
+    font-weight: 500;
+    color: #333;
+  }
+  
+  .face-props {
+    margin-top: 15px;
+    border-top: 1px solid rgba(0, 0, 0, 0.1);
+    padding-top: 10px;
+  }
+  
+  /* Face highlight effect */
+  .face-highlight {
+    position: absolute;
+    z-index: 2;
+    pointer-events: none;
+    opacity: 0.7;
+    transition: opacity 0.3s;
+  }
+  

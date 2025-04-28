@@ -168,108 +168,48 @@ const safeNumber = (value: string): number | undefined => {
 
 // Function to convert classifier data to TreeNode structure
 function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
-  const result: TreeNode[] = [];
-  
-  // Try to get spatial structure first
-  if (classifier.list.spatialStructures && typeof classifier.list.spatialStructures === 'object') {
-    try {
-      // Convert spatial structure to tree
-      const spatialData = classifier.list.spatialStructures;
-      
-      if (spatialData && Object.keys(spatialData).length > 0) {
-        const firstKey = Object.keys(spatialData)[0];
-        const structure = spatialData[firstKey];
-        
-        const buildNode = (level: any, expressID: number): TreeNode => {
-          const type = level.type || 'Unknown';
-          const name = level.name || `${getTypeName(type)} ${expressID}`;
-          
-          const node: TreeNode = {
-            id: expressID,
-            expressID: expressID,
-            name: name,
-            type: getTypeName(type),
+  const systems = classifier.list.spatialStructures;
+  if (!systems) return [];
+
+  // ---- First pass: create one node per expressID -------------
+  const nodes = new Map<number, TreeNode>();
+
+  for (const groupName in systems) {
+    const group = systems[groupName];            // { id, name, map }
+    const parentID = group.id ?? -1;
+
+    // every Set in `map` contains the expressIDs that belong to this level
+    for (const fragID in group.map) {
+      for (const eid of group.map[fragID]) {
+        if (!nodes.has(eid)) {
+          nodes.set(eid, {
+            id: eid,
+            expressID: eid,
+            name: groupName || `Item ${eid}`,
+            type: getTypeName(groupName),
             children: []
-          };
-          
-          // Add children if available
-          if (level.children) {
-            for (const [childID, childLevel] of Object.entries(level.children)) {
-              const childExpressID = safeNumber(childID);
-              if (childExpressID !== undefined) {
-                node.children.push(buildNode(childLevel, childExpressID));
-              }
-            }
-          }
-          
-          return node;
-        };
-        
-        // Start with the root level (usually project)
-        for (const [expressID, level] of Object.entries(structure)) {
-          const rootExpressID = safeNumber(expressID);
-          if (rootExpressID !== undefined) {
-            result.push(buildNode(level, rootExpressID));
-          }
+          });
         }
+        // store child→parent relation (second pass will link them)
+        (nodes.get(eid)! as any)._parent = parentID >= 0 ? parentID : null;
       }
-    } catch (error) {
-      console.warn('Error parsing spatial structure:', error);
-    }
-  } 
-  // If no spatial structure, try entities
-  else if (classifier.list.entities && typeof classifier.list.entities === 'object') {
-    try {
-      // Group by entity type
-      const entitiesData = classifier.list.entities;
-      const typeMap = new Map<string, number[]>();
-      
-      // Create a map of types to expressIDs
-      Object.entries(entitiesData).forEach(([type, items]) => {
-        const ids: number[] = [];
-        
-        if (Array.isArray(items)) {
-          items.forEach((item: any) => {
-            if (item && typeof item.expressID === 'number') {
-              ids.push(item.expressID);
-            }
-          });
-        }
-        
-        if (ids.length > 0) {
-          typeMap.set(type, ids);
-        }
-      });
-      
-      // Create type categories
-      typeMap.forEach((ids, type) => {
-        const typeName = getTypeName(type);
-        const node: TreeNode = {
-          id: -1, // Use negative ID for categories
-          name: `${typeName}s`, // Pluralize
-          type: type,
-          children: []
-        };
-        
-        // Add individual items
-        ids.forEach((expressID, index) => {
-          node.children.push({
-            id: expressID,
-            expressID: expressID,
-            name: `${typeName} ${index + 1}`,
-            type: type,
-            children: []
-          });
-        });
-        
-        result.push(node);
-      });
-    } catch (error) {
-      console.warn('Error parsing entities:', error);
     }
   }
-  
-  return result;
+
+  // ---- Second pass: build the hierarchy ----------------------
+  const roots: TreeNode[] = [];
+  nodes.forEach((node) => {
+    const parentID = (node as any)._parent;
+    delete (node as any)._parent;
+
+    if (parentID != null && nodes.has(parentID)) {
+      nodes.get(parentID)!.children.push(node);
+    } else {
+      roots.push(node);           // top-level (Project / Site / etc.)
+    }
+  });
+
+  return roots;
 }
 
 // Get a friendly type name from IFC type

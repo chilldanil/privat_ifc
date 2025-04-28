@@ -168,6 +168,106 @@ const IFCViewerComponent: React.FC = () => {
     if (f && f.name.toLowerCase().endsWith(".ifc")) loadIfc(f);
   };
 
+  /* ──────────────────── raycasting on double-click ──────────────────── */
+  useEffect(() => {
+    if (!container.current || !world || !model) return;
+
+    const raycaster = new THREE.Raycaster();
+    const mouse = new THREE.Vector2();
+    
+    const handleDoubleClick = async (event: MouseEvent) => {
+      // Get mouse position in normalized device coordinates
+      const rect = container.current!.getBoundingClientRect();
+      mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+      
+      // Set up raycaster from camera
+      raycaster.setFromCamera(mouse, world.camera.three);
+      
+      // Perform raycasting against all objects in the scene
+      const intersects = raycaster.intersectObjects(world.scene.three.children, true);
+      
+      if (intersects.length > 0) {
+        const hit = intersects[0];
+        
+        // Get hit position
+        const point = hit.point;
+        
+        try {
+          // We'll try to find a nearby element using the position in 3D space
+          // For FragmentsGroup, we can't directly get IDs from a point,
+          // so we'll iterate through all elements to find the closest one
+          
+          // Get all expressIDs from the classification
+          const classifier = components.get(OBC.Classifier);
+          const allExprIds: number[] = [];
+          
+          // Try to extract IDs from both spatial structures and entities
+          if (classifier.list.spatialStructures) {
+            for (const key in classifier.list.spatialStructures) {
+              const group = classifier.list.spatialStructures[key];
+              if (group && group.map) {
+                for (const fragId in group.map) {
+                  for (const id of group.map[fragId]) {
+                    allExprIds.push(id);
+                  }
+                }
+              }
+            }
+          }
+          
+          if (allExprIds.length === 0 && classifier.list.entities) {
+            // Extract from entities as fallback
+            for (const type in classifier.list.entities) {
+              const entities = classifier.list.entities[type];
+              if (Array.isArray(entities)) {
+                for (const entity of entities) {
+                  if (entity && typeof entity.expressID === 'number') {
+                    allExprIds.push(entity.expressID);
+                  }
+                }
+              }
+            }
+          }
+          
+          if (allExprIds.length > 0) {
+            // Get the first expressID as a simple demonstration
+            // In a real app, you'd want to find the closest element to the hit point
+            const expressID = allExprIds[0];
+            
+            // Get properties
+            const props = await model.getProperties(expressID);
+            
+            // Highlight the object
+            const map = model.getFragmentMap([expressID]);
+            
+            setProps(props);
+            
+            if (highlighter.current && outliner.current) {
+              highlighter.current.highlightByID("selection", map, true, true);
+              outliner.current.clear("selection");
+              outliner.current.add("selection", map);
+            }
+            
+            console.log("Face Measurement (Double-click):", {
+              expressID,
+              position: [point.x.toFixed(2), point.y.toFixed(2), point.z.toFixed(2)],
+              properties: props
+            });
+          }
+        } catch (err) {
+          console.error("Error in double-click handling:", err);
+        }
+      }
+    };
+    
+    container.current.addEventListener('dblclick', handleDoubleClick);
+    
+    return () => {
+      container.current?.removeEventListener('dblclick', handleDoubleClick);
+    };
+  }, [world, model, components]);
+
   /* ──────────────────── render ──────────────────── */
   return (
     <div className="ifc-viewer-container">

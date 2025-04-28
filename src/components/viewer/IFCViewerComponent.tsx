@@ -1,263 +1,229 @@
-import { useEffect, useRef, useState, Suspense } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import * as OBC from "@thatopen/components";
 import * as OBCF from "@thatopen/components-front";
 import * as THREE from "three";
+import { FragmentsGroup, FragmentIdMap } from "@thatopen/fragments";
+import ModelTreePanel from "./ModelTreePanel";
+
 import "../../styles/IFCViewerComponent.css";
+import "../../styles/TreeView.css";
 
-// --------------------------------------------------
-// 🔌  Extended types for convenience
-// --------------------------------------------------
-interface ExtendedIfcLoader extends OBC.IfcLoader {
-  ifcManager: {
-    getItemProperties: (
-      modelID: number,
-      expressID: number,
-      recursive: boolean
-    ) => Promise<Record<string, any>>;
-  };
-}
-
-interface ExtendedFragmentsGroup extends OBC.FragmentsGroup {
-  /** IFC model identifier */
-  modelID: number;
-}
-
-// --------------------------------------------------
-// 🧾  Simple key/value property panel
-// --------------------------------------------------
-interface PropertiesPanelProps {
-  properties: Record<string, any> | null;
-  onClose: () => void;
-}
-
-const PropertiesPanel: React.FC<PropertiesPanelProps> = ({ properties, onClose }) => {
-  if (!properties) return null;
-
-  return (
-    <div className="properties-panel">
-      <div className="properties-header">
-        <h3>Properties</h3>
-        <button onClick={onClose}>×</button>
-      </div>
-      <div className="properties-content">
-        {Object.entries(properties).map(([key, value]) => (
-          <div key={key} className="property-item">
-            <span className="property-key">{key}:</span>
-            <span className="property-value">{JSON.stringify(value)}</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
-};
-
-// --------------------------------------------------
-// 🎬  Main React component
-// --------------------------------------------------
 const IFCViewerComponent: React.FC = () => {
-  const navigate = useNavigate();
-  // ---------- refs & state ----------
-  const containerRef = useRef<HTMLDivElement>(null);
+  /* ──────────────────── state / refs ──────────────────── */
+  const nav       = useNavigate();
+  const container = useRef<HTMLDivElement>(null);
 
-  const [components] = useState(() => new OBC.Components());
+  const [components]   = useState(() => new OBC.Components());
   const [world, setWorld] = useState<
     OBC.SimpleWorld<OBC.SimpleScene, OBC.SimpleCamera, OBCF.PostproductionRenderer>
-  >(null);
-  const [ifcLoader, setIfcLoader] = useState<ExtendedIfcLoader | null>(null);
+  >();
 
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [selectedProps, setSelectedProps] = useState<Record<string, any> | null>(null);
+  const [ifcLoader, setIfcLoader]   = useState<OBC.IfcLoader | null>(null);
+  const [model, setModel]           = useState<FragmentsGroup | null>(null);
+  const [selectedProps, setProps]   = useState<Record<string, any> | null>(null);
+  const [loading, setLoading]       = useState(false);
+  const [error,   setError]         = useState<string | null>(null);
+  const [drag,    setDrag]          = useState(false);
+  const [showTree, setShowTree]     = useState(true);
 
-  // Keep refs to highlighter / outliner so we can dispose later if needed
-  const highlighterRef = useRef<OBCF.Highlighter>();
-  const outlinerRef = useRef<OBCF.Outliner>();
+  const highlighter = useRef<OBCF.Highlighter>();
+  const outliner    = useRef<OBCF.Outliner>();
 
-  // --------------------------------------------------
-  // 🌍  World + renderer + helper setup (runs once)
-  // --------------------------------------------------
+  /* ──────────────────── create world (once) ──────────────────── */
   useEffect(() => {
-    if (!containerRef.current) return;
+    if (!container.current) return;
 
-    // 1️⃣  Create a world with post‑production renderer so outlines work
     const worlds = components.get(OBC.Worlds);
     const w = worlds.create<
       OBC.SimpleScene,
       OBC.SimpleCamera,
       OBCF.PostproductionRenderer
     >();
-
-    w.scene = new OBC.SimpleScene(components);
-    w.renderer = new OBCF.PostproductionRenderer(components, containerRef.current);
-    w.camera = new OBC.SimpleCamera(components);
-
-    // Enable post‑processing (needed for outlines)
+    w.scene     = new OBC.SimpleScene(components);
+    w.renderer  = new OBCF.PostproductionRenderer(components, container.current);
+    w.camera    = new OBC.SimpleCamera(components);
     w.renderer.postproduction.enabled = true;
 
     setWorld(w);
     components.init();
 
-    // 2️⃣  Basic lighting & grid
-    const ambient = new THREE.AmbientLight(0xffffff, 0.5);
-    const dir = new THREE.DirectionalLight(0xffffff, 1);
-    dir.position.set(5, 10, 5);
-    w.scene.three.add(ambient, dir);
-
-    const grid = components.get(OBC.Grids).create(w);
-    // Prevent the outline effect from drawing around the grid
-    w.renderer.postproduction.customEffects.excludedMeshes.push(grid.three);
-
-    // 3️⃣  Camera start position
     w.camera.controls.setLookAt(10, 10, 10, 0, 0, 0);
 
-    // 4️⃣  IFC loader
-    const loader = components.get(OBC.IfcLoader) as ExtendedIfcLoader;
-    loader
-      .setup({ autoSetWasm: true })
-      .then(() => setIfcLoader(loader))
-      .catch((err) => {
-        console.error(err);
-        setError("Failed to initialise IFC loader (WASM missing?)");
-      });
-
-    // 5️⃣  Highlighter + outliner for hover & selection feedback
-    const highlighter = components.get(OBCF.Highlighter);
-    highlighter.setup({ world: w });
-    highlighter.zoomToSelection = true;
-    highlighterRef.current = highlighter;
-
-    const outliner = components.get(OBCF.Outliner);
-    outliner.world = w;
-    outliner.enabled = true;
-    outlinerRef.current = outliner;
-
-    // Create a simple yellow outline style (opacity controls width)
-    outliner.create(
-      "selection",
-      new THREE.MeshBasicMaterial({
-        color: 0xffdc00,
-        transparent: true,
-        opacity: 0.5,
-      })
+    /* lights + grid */
+    const dir = new THREE.DirectionalLight(0xffffff, 1);
+    dir.position.set(5, 10, 5);
+    
+    w.scene.three.add(
+      new THREE.AmbientLight(0xffffff, 0.5),
+      dir
     );
+    const grid = components.get(OBC.Grids).create(w);
+    w.renderer.postproduction.customEffects.excludedMeshes.push(grid.three);
 
-    // When an element is selected -> outline + load properties
-    highlighter.events.select.onHighlight.add(async (selection) => {
-      outliner.clear("selection");
-      outliner.add("selection", selection);
+    /* loader */
+    const ldr = components.get(OBC.IfcLoader);
+    ldr.setup({ autoSetWasm: true }).then(() => setIfcLoader(ldr));
 
-      try {
-        const modelID = (selection.model as ExtendedFragmentsGroup).modelID;
-        const firstID = selection.ids[0];
-        const props = await loader.ifcManager.getItemProperties(modelID, firstID, true);
-        setSelectedProps(props);
-      } catch (err) {
-        console.warn("Could not fetch IFC properties", err);
-      }
+    /* highlighter & outliner */
+    const h = components.get(OBCF.Highlighter);
+    h.setup({ world: w });
+    h.zoomToSelection = true;
+    highlighter.current = h;
+
+    const o = components.get(OBCF.Outliner);
+    o.world = w;
+    o.enabled = true;
+    o.create(
+      "selection",
+      new THREE.MeshBasicMaterial({ color: 0xffdc00, transparent: true, opacity: 0.5 })
+    );
+    outliner.current = o;
+
+    /* clear on empty click */
+    h.events.select.onClear.add(() => {
+      o.clear("selection");
+      setProps(null);
     });
 
-    // Clear outline + panel when selection cleared (click on empty space)
-    highlighter.events.select.onClear.add(() => {
-      outliner.clear("selection");
-      setSelectedProps(null);
-    });
-
-    // Clean‑up on unmount
-    return () => {
-      components.dispose();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => components.dispose();
   }, []);
 
-  // --------------------------------------------------
-  // 📂  IFC file loading helper
-  // --------------------------------------------------
-  const handleFileUpload = async (file: File) => {
-    if (!file || !ifcLoader || !world) return;
+  /* ──────────────────── highlight callback (after loader ready) ──────────────────── */
+  useEffect(() => {
+    if (!ifcLoader || !highlighter.current || !outliner.current) return;
 
-    // Clear UI / selection
-    setSelectedProps(null);
-    highlighterRef.current?.clear();
+    const onHighlight = async (fragMap: FragmentIdMap) => {
+      if (!model) return;
 
-    setLoading(true);
-    setError(null);
+      outliner.current!.clear("selection");
+      outliner.current!.add("selection", fragMap);
+
+      const entries = Object.entries(fragMap);
+      if (entries.length === 0) return;
+      
+      const [, ids] = entries[0]; // first fragment's Set
+      const firstValue = ids.values().next().value;
+      
+      if (typeof firstValue !== 'number') return;
+      
+      const expressID = firstValue as number;
+      const props = await model.getProperties(expressID);
+
+      setProps(props);
+    };
+
+    highlighter.current.events.select.onHighlight.add(onHighlight);
+    return () =>
+      highlighter.current?.events.select.onHighlight.remove(onHighlight);
+  }, [ifcLoader, model]);
+
+  /* ──────────────────── file loader ──────────────────── */
+  const loadIfc = async (file: File) => {
+    if (!ifcLoader || !world) return;
+    setLoading(true); setError(null); setProps(null);
 
     try {
       const buffer = await file.arrayBuffer();
-      const model = await ifcLoader.load(new Uint8Array(buffer));
-      model.name = file.name;
+      const grp    = await ifcLoader.load(new Uint8Array(buffer)) as FragmentsGroup;
+      grp.name     = file.name;
 
-      // Center model in view
-      world.scene.three.add(model);
-      const box = new THREE.Box3().setFromObject(model);
+      world.scene.three.add(grp);
+      const box = new THREE.Box3().setFromObject(grp);
       const center = box.getCenter(new THREE.Vector3());
-      const size = box.getSize(new THREE.Vector3()).length();
-      world.camera.controls.fitToSphere(new THREE.Sphere(center, size * 0.6), true);
-    } catch (err) {
-      console.error("IFC load error:", err);
-      setError("Failed to load IFC file. Is it valid?");
-    } finally {
-      setLoading(false);
+      const size = box.getSize(new THREE.Vector3()).length() * 0.6;
+      
+      world.camera.controls.fitToSphere(
+        new THREE.Sphere(center, size),
+        true
+      );
+
+      setModel(grp);
+      components.get(OBC.Classifier).byEntity(grp);
     }
+    catch (e) { setError("Failed to load IFC (is it valid?)"); }
+    finally  { setLoading(false); }
   };
 
-  // --------------------------------------------------
-  // 🖱️  Drag‑and‑drop helpers
-  // --------------------------------------------------
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-  const handleDragLeave = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-  };
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && file.name.toLowerCase().endsWith(".ifc")) {
-      handleFileUpload(file);
-    }
+  /* ──────────────────── tree click → highlight ──────────────────── */
+  const selectFromTree = async (expressID: number) => {
+    if (!model || !highlighter.current || !outliner.current) return;
+
+    const map = model.getFragmentMap([expressID]);
+    highlighter.current.highlightByID("selection", map, true, true);
+    outliner.current.clear("selection");
+    outliner.current.add("selection", map);
+
+    const props = await model.getProperties(expressID);
+    setProps(props);
   };
 
-  // --------------------------------------------------
-  // 🖥️  Render
-  // --------------------------------------------------
+  /* ──────────────────── drag-and-drop helpers ──────────────────── */
+  const dragOver  = (e: React.DragEvent) => { e.preventDefault(); setDrag(true);  };
+  const dragLeave = (e: React.DragEvent) => { e.preventDefault(); setDrag(false); };
+  const drop      = (e: React.DragEvent) => {
+    e.preventDefault(); setDrag(false);
+    const f = e.dataTransfer.files[0];
+    if (f && f.name.toLowerCase().endsWith(".ifc")) loadIfc(f);
+  };
+
+  /* ──────────────────── render ──────────────────── */
   return (
     <div className="ifc-viewer-container">
-      {/* Toolbar */}
+      {/* toolbar */}
       <div className="ifc-controls">
-        <button 
-          className="back-button"
-          onClick={() => navigate('/')}
-        >
-          Back to Home
-        </button>
-        <div className="file-input-container">
-          <button className="file-input-button">Upload IFC File</button>
+        <button className="back-button" onClick={() => nav("/")}>Back to Home</button>
+
+        <label className="file-input-container">
+          <span className="file-input-button">Upload IFC File</span>
           <input
             type="file"
             accept=".ifc"
             className="file-input"
-            onChange={(e) => e.target.files?.[0] && handleFileUpload(e.target.files[0])}
+            onChange={(e) => e.target.files?.[0] && loadIfc(e.target.files[0])}
           />
-        </div>
+        </label>
+
+        {model && (
+          <button className="tree-button" onClick={() => setShowTree(!showTree)}>
+            {showTree ? "Hide Tree" : "Show Tree"}
+          </button>
+        )}
       </div>
 
-      {/* Viewer canvas & DnD overlay */}
+      {/* viewer + overlays */}
       <div
-        className={`viewer-container ${isDragging ? "drag-over" : ""}`}
-        onDragOver={handleDragOver}
-        onDragLeave={handleDragLeave}
-        onDrop={handleDrop}
+        className={`viewer-container ${drag ? "drag-over" : ""}`}
+        onDragOver={dragOver} onDragLeave={dragLeave} onDrop={drop}
       >
-        {loading && <div className="loading">Loading IFC file…</div>}
-        {error && <div className="error">{error}</div>}
-        <div ref={containerRef} className="ifc-viewer" />
-        {selectedProps && <PropertiesPanel properties={selectedProps} onClose={() => setSelectedProps(null)} />}
+        {loading && <div className="loading">Loading…</div>}
+        {error   && <div className="error">{error}</div>}
+
+        <div ref={container} className="ifc-viewer"/>
+
+        {showTree && model && (
+          <ModelTreePanel 
+            components={components}
+            model={model} 
+            onSelect={selectFromTree}
+          />
+        )}
+
+        {selectedProps && (
+          <div className="properties-panel">
+            <div className="properties-header">
+              <h3>Properties</h3><button onClick={() => setProps(null)}>×</button>
+            </div>
+            <div className="properties-content">
+              {Object.entries(selectedProps).map(([k,v]) => (
+                <div key={k} className="property-item">
+                  <span className="property-key">{k}:</span>
+                  <span className="property-value">{JSON.stringify(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

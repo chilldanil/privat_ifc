@@ -51,14 +51,19 @@ The application will be available at `http://localhost:5173`
 ifc-viewer-project/
 ├── src/
 │   ├── components/
-│   │   ├── IFCViewerComponent.tsx
-│   │   ├── LandingPage.tsx
+│   │   ├── viewer/
+│   │   │   └── IFCViewerComponent.tsx
+│   │   ├── pages/
+│   │   │   └── LandingPage.tsx
+│   │   ├── styles/
+│   │   │   ├── IFCViewerComponent.css
+│   │   │   ├── LandingPage.css
+│   │   │   └── style.css
+│   │   ├── main.ts
 │   │   └── ...
-│   ├── main.tsx
+│   ├── public/
+│   ├── package.json
 │   └── ...
-├── public/
-├── package.json
-└── ...
 ```
 
 ## Usage

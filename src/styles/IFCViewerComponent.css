@@ -1,19 +1,14 @@
 .ifc-viewer-container {
     width: 100%;
     height: 100vh;
-    display: grid;
-    grid-template-rows: auto 1fr;
-    grid-template-columns: 300px 1fr 300px;
-    grid-template-areas:
-        "header header header"
-        "left-sidebar main right-sidebar";
+    display: flex;
+    flex-direction: column;
     background-color: #1a1a1a;
     color: #ffffff;
     overflow: hidden;
 }
 
 .ifc-controls {
-    grid-area: header;
     padding: 1rem;
     background-color: #1a1a1a;
     border-bottom: 1px solid #333;
@@ -21,30 +16,75 @@
     gap: 1rem;
     align-items: center;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+    z-index: 10;
+}
+
+/* Main viewer layout with resizable panels */
+.viewer-layout {
+    display: flex;
+    flex: 1;
+    height: calc(100vh - 65px); /* Adjust if header height changes */
+    overflow: hidden;
 }
 
 .left-sidebar {
-    grid-area: left-sidebar;
     background-color: #1f1f1f;
     border-right: 1px solid #333;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    min-width: 7%;
+    max-width: 30%;
+    flex-shrink: 0;
 }
 
 .main-content {
-    grid-area: main;
     position: relative;
+    flex-grow: 1;
     overflow: hidden;
 }
 
 .right-sidebar {
-    grid-area: right-sidebar;
     background-color: #1f1f1f;
     border-left: 1px solid #333;
     overflow: hidden;
     display: flex;
     flex-direction: column;
+    min-width: 7%;
+    max-width: 30%;
+    flex-shrink: 0;
+}
+
+/* Panel divider for resizing */
+.panel-divider {
+    width: 6px;
+    background-color: #333;
+    cursor: col-resize;
+    position: relative;
+    flex-shrink: 0;
+    transition: background-color 0.2s;
+}
+
+.panel-divider:hover,
+.panel-divider:active {
+    background-color: #3b82f6;
+}
+
+.panel-divider::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 2px;
+    height: 30px;
+    background-color: #666;
+    border-radius: 2px;
+}
+
+.panel-divider:hover::after,
+.panel-divider:active::after {
+    background-color: #ffffff;
 }
 
 .sidebar-header {

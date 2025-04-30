@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import * as OBC from "@thatopen/components";
 import * as OBCF from "@thatopen/components-front";
@@ -27,8 +27,15 @@ const IFCViewerComponent: React.FC = () => {
   const [drag,    setDrag]          = useState(false);
   const [showTree, setShowTree]     = useState(true);
 
+  // State for panel widths and dragging status
+  const [leftPanelWidth, setLeftPanelWidth] = useState(20); // Initial width in percentage
+  const [rightPanelWidth, setRightPanelWidth] = useState(20); // Initial width in percentage
+  const [isDraggingLeft, setIsDraggingLeft] = useState(false);
+  const [isDraggingRight, setIsDraggingRight] = useState(false);
+
   const highlighter = useRef<OBCF.Highlighter>();
   const outliner    = useRef<OBCF.Outliner>();
+  const mainLayoutRef = useRef<HTMLDivElement>(null); // Ref for the main layout container
 
   /* ──────────────────── create world (once) ──────────────────── */
   useEffect(() => {
@@ -165,7 +172,20 @@ const IFCViewerComponent: React.FC = () => {
   const drop      = (e: React.DragEvent) => {
     e.preventDefault(); setDrag(false);
     const f = e.dataTransfer.files[0];
-    if (f && f.name.toLowerCase().endsWith(".ifc")) loadIfc(f);
+    if (f && f.name.toLowerCase().endsWith(".ifc")) {
+        setModel(null); // Clear previous model
+        setProps(null); // Clear properties
+        if(highlighter.current) highlighter.current.clear('selection'); // Clear highlight
+        if(outliner.current) outliner.current.clear('selection'); // Clear outline
+        if (world) { // Remove previous model from scene
+             world.scene.three.children.forEach(child => {
+                if (child instanceof FragmentsGroup) {
+                    world.scene.three.remove(child);
+                }
+            });
+        }
+        loadIfc(f);
+    }
   };
 
   /* ──────────────────── raycasting on double-click ──────────────────── */
@@ -266,7 +286,64 @@ const IFCViewerComponent: React.FC = () => {
     return () => {
       container.current?.removeEventListener('dblclick', handleDoubleClick);
     };
-  }, [world, model, components]);
+  }, [world, model, components, highlighter, outliner]);
+
+  /* ──────────────────── Resizer Logic ──────────────────── */
+  const MIN_WIDTH_PERCENT = 7;
+  const MAX_WIDTH_PERCENT = 30;
+
+  const handleMouseDown = (divider: 'left' | 'right') => (e: React.MouseEvent) => {
+    e.preventDefault();
+    if (divider === 'left') setIsDraggingLeft(true);
+    if (divider === 'right') setIsDraggingRight(true);
+  };
+
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDraggingLeft && !isDraggingRight) return;
+    if (!mainLayoutRef.current) return;
+
+    const containerRect = mainLayoutRef.current.getBoundingClientRect();
+    const totalWidth = containerRect.width;
+
+    if (isDraggingLeft) {
+      const newLeftWidthPx = e.clientX - containerRect.left;
+      let newLeftWidthPercent = (newLeftWidthPx / totalWidth) * 100;
+      newLeftWidthPercent = Math.max(MIN_WIDTH_PERCENT, Math.min(MAX_WIDTH_PERCENT, newLeftWidthPercent));
+      setLeftPanelWidth(newLeftWidthPercent);
+    } else if (isDraggingRight) {
+      const newRightWidthPx = containerRect.right - e.clientX;
+      let newRightWidthPercent = (newRightWidthPx / totalWidth) * 100;
+      newRightWidthPercent = Math.max(MIN_WIDTH_PERCENT, Math.min(MAX_WIDTH_PERCENT, newRightWidthPercent));
+      setRightPanelWidth(newRightWidthPercent);
+    }
+  }, [isDraggingLeft, isDraggingRight]);
+
+  const handleMouseUp = useCallback(() => {
+    setIsDraggingLeft(false);
+    setIsDraggingRight(false);
+  }, []);
+
+  useEffect(() => {
+    if (isDraggingLeft || isDraggingRight) {
+      window.addEventListener('mousemove', handleMouseMove);
+      window.addEventListener('mouseup', handleMouseUp);
+      // Add user-select: none to body to prevent text selection during drag
+      document.body.style.userSelect = 'none';
+      document.body.style.cursor = 'col-resize';
+    } else {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    }
+
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      window.removeEventListener('mouseup', handleMouseUp);
+      document.body.style.userSelect = '';
+      document.body.style.cursor = '';
+    };
+  }, [isDraggingLeft, isDraggingRight, handleMouseMove, handleMouseUp]);
 
   /* ──────────────────── render ──────────────────── */
   return (
@@ -292,70 +369,96 @@ const IFCViewerComponent: React.FC = () => {
         )}
       </div>
 
-      {/* Left Sidebar - Model Structure */}
-      <div className="left-sidebar">
-        {model && showTree ? (
-          <ModelTreePanel 
-            components={components}
-            model={model} 
-            onSelect={selectFromTree}
-          />
-        ) : (
-          <div className="sidebar-placeholder">
-            <div className="sidebar-header">
-              <h3>Model Structure</h3>
-            </div>
-            <div className="sidebar-content">
-              <div className="tree-empty">
-                {model ? "Tree hidden" : "No model loaded"}
-              </div>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Main Content - 3D Viewer */}
-      <div className="main-content">
-        <div
-          className={`viewer-container ${drag ? "drag-over" : ""}`}
-          onDragOver={dragOver} onDragLeave={dragLeave} onDrop={drop}
+      {/* Main layout with resizable panels */}
+      <div
+        ref={mainLayoutRef}
+        className={`viewer-layout ${drag ? "drag-over" : ""}`}
+        onDragOver={dragOver}
+        onDragLeave={dragLeave}
+        onDrop={drop}
+      >
+        {/* Left Sidebar - Model Structure */}
+        <div 
+          className="left-sidebar"
+          style={{ width: `${leftPanelWidth}%` }}
         >
-          {loading && <div className="loading">Loading…</div>}
-          {error && <div className="error">{error}</div>}
-
-          <div ref={container} className="ifc-viewer"/>
-        </div>
-      </div>
-
-      {/* Right Sidebar - Properties */}
-      <div className="right-sidebar">
-        {selectedProps ? (
-          <div className="properties-panel">
-            <div className="properties-header">
-              <h3>Properties</h3>
-              <button onClick={() => setProps(null)}>×</button>
-            </div>
-            <div className="properties-content">
-              {Object.entries(selectedProps).map(([k,v]) => (
-                <div key={k} className="property-item">
-                  <span className="property-key">{k}:</span>
-                  <span className="property-value">{JSON.stringify(v)}</span>
+          {model && showTree ? (
+            <ModelTreePanel 
+              components={components}
+              model={model} 
+              onSelect={selectFromTree}
+            />
+          ) : (
+            <div className="sidebar-placeholder">
+              <div className="sidebar-header">
+                <h3>Model Structure</h3>
+              </div>
+              <div className="sidebar-content">
+                <div className="tree-empty">
+                  {model ? "Tree hidden" : "No model loaded"}
                 </div>
-              ))}
-            </div>
-          </div>
-        ) : (
-          <div className="sidebar-placeholder">
-            <div className="sidebar-header">
-              <h3>Properties</h3>
-            </div>
-            <div className="sidebar-content">
-              <div className="tree-empty">
-                No element selected
               </div>
             </div>
+          )}
+        </div>
+
+        {/* Left Divider */}
+        <div
+          className="panel-divider"
+          onMouseDown={handleMouseDown('left')}
+        />
+
+        {/* Main Content - 3D Viewer */}
+        <div className="main-content">
+          <div
+            className="viewer-container"
+          >
+            {loading && <div className="loading">Loading…</div>}
+            {error && <div className="error">{error}</div>}
+
+            <div ref={container} className="ifc-viewer"/>
           </div>
-        )}
+        </div>
+
+        {/* Right Divider */}
+        <div
+          className="panel-divider"
+          onMouseDown={handleMouseDown('right')}
+        />
+
+        {/* Right Sidebar - Properties */}
+        <div 
+          className="right-sidebar"
+          style={{ width: `${rightPanelWidth}%` }}
+        >
+          {selectedProps ? (
+            <div className="properties-panel">
+              <div className="properties-header">
+                <h3>Properties</h3>
+                <button onClick={() => setProps(null)}>×</button>
+              </div>
+              <div className="properties-content">
+                {Object.entries(selectedProps).map(([k,v]) => (
+                  <div key={k} className="property-item">
+                    <span className="property-key">{k}:</span>
+                    <span className="property-value">{JSON.stringify(v)}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="sidebar-placeholder">
+              <div className="sidebar-header">
+                <h3>Properties</h3>
+              </div>
+              <div className="sidebar-content">
+                <div className="tree-empty">
+                  No element selected
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -171,44 +171,139 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
   const systems = classifier.list.spatialStructures;
   if (!systems) return [];
 
-  // ---- First pass: create one node per expressID -------------
-  const nodes = new Map<number, TreeNode>();
+  // Debug output
+  console.log("Spatial structures:", JSON.stringify(classifier.list.spatialStructures, null, 2));
 
+  // ---- Step 1: Create spatial structure nodes (by group ID) -------------
+  const spatialNodes = new Map<number, TreeNode>();
+  const elementNodes = new Map<number, TreeNode>();
+  
+  // First pass: create spatial structure nodes
   for (const groupName in systems) {
-    const group = systems[groupName];            // { id, name, map }
-    const parentID = group.id ?? -1;
+    const group = systems[groupName];
+    const groupID = group.id;
+    
+    if (groupID !== undefined && groupID !== null && !spatialNodes.has(groupID)) {
+      spatialNodes.set(groupID, {
+        id: groupID,
+        expressID: groupID,
+        name: groupName || `Group ${groupID}`,
+        type: getTypeName(groupName),
+        children: []
+      });
+    }
+  }
 
-    // every Set in `map` contains the expressIDs that belong to this level
+  // ---- Step 2: Create and assign element nodes to their spatial parents -------------
+  for (const groupName in systems) {
+    const group = systems[groupName];
+    const parentID = group.id;
+    
+    if (parentID === undefined || parentID === null) continue;
+    
+    // Get the parent node (create it if it doesn't exist)
+    let parentNode = spatialNodes.get(parentID);
+    if (!parentNode) {
+      parentNode = {
+        id: parentID,
+        expressID: parentID,
+        name: groupName || `Group ${parentID}`,
+        type: getTypeName(groupName),
+        children: []
+      };
+      spatialNodes.set(parentID, parentNode);
+    }
+    
+    // Create element nodes for each expressID in this group
     for (const fragID in group.map) {
       for (const eid of group.map[fragID]) {
-        if (!nodes.has(eid)) {
-          nodes.set(eid, {
+        // Skip if this is a spatial structure node (already handled)
+        if (spatialNodes.has(eid)) continue;
+        
+        // Create element node if it doesn't exist
+        if (!elementNodes.has(eid)) {
+          // Try to get element type from the entity list
+          let elementType = 'Element';
+          let elementName = `Element ${eid}`;
+          
+          // Look up this element in the entity list to get its type
+          try {
+            const entityList = classifier.list.entities;
+            if (entityList) {
+              // Search all entity types
+              for (const entityType in entityList) {
+                const entities = entityList[entityType];
+                if (Array.isArray(entities)) {
+                  // Find this express ID in the entities
+                  const entity = entities.find(e => e.expressID === eid);
+                  if (entity) {
+                    elementType = getTypeName(entityType);
+                    
+                    // Try to get a better name from entity properties
+                    if (entity.Name) {
+                      elementName = entity.Name;
+                    } else if (entity.GlobalId) {
+                      elementName = `${elementType} [${entity.GlobalId}]`;
+                    } else {
+                      elementName = `${elementType} ${eid}`;
+                    }
+                    break;
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.warn(`Error getting entity type for ${eid}:`, error);
+          }
+          
+          const elementNode: TreeNode = {
             id: eid,
             expressID: eid,
-            name: groupName || `Item ${eid}`,
-            type: getTypeName(groupName),
+            name: elementName,
+            type: elementType,
             children: []
-          });
+          };
+          elementNodes.set(eid, elementNode);
+          
+          // Add element as child to its spatial parent
+          parentNode.children.push(elementNode);
         }
-        // store child→parent relation (second pass will link them)
-        (nodes.get(eid)! as any)._parent = parentID >= 0 ? parentID : null;
       }
     }
   }
 
-  // ---- Second pass: build the hierarchy ----------------------
-  const roots: TreeNode[] = [];
-  nodes.forEach((node) => {
-    const parentID = (node as any)._parent;
-    delete (node as any)._parent;
-
-    if (parentID != null && nodes.has(parentID)) {
-      nodes.get(parentID)!.children.push(node);
-    } else {
-      roots.push(node);           // top-level (Project / Site / etc.)
-    }
+  // Sort elements inside each spatial node by type
+  spatialNodes.forEach(node => {
+    node.children.sort((a, b) => {
+      const typeA = a.type || '';
+      const typeB = b.type || '';
+      if (typeA !== typeB) {
+        return typeA.localeCompare(typeB);
+      }
+      return a.name.localeCompare(b.name);
+    });
   });
 
+  // ---- Step 3: Build a hierarchy of spatial structure nodes -------------
+  // This would require property metadata about each node to know Project > Site > Building, etc.
+  // For now, we'll just return all spatial nodes as root nodes
+  const roots: TreeNode[] = Array.from(spatialNodes.values());
+  
+  // Sort roots by type priority (Project -> Site -> Building -> Storey, etc.)
+  const typePriority: Record<string, number> = {
+    'Project': 1,
+    'Site': 2,
+    'Building': 3,
+    'Storey': 4,
+    'Space': 5
+  };
+  
+  roots.sort((a, b) => {
+    const priorityA = typePriority[a.type || ''] || 100;
+    const priorityB = typePriority[b.type || ''] || 100;
+    return priorityA - priorityB;
+  });
+  
   return roots;
 }
 

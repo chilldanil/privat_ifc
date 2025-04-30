@@ -292,28 +292,48 @@ const IFCViewerComponent: React.FC = () => {
         )}
       </div>
 
-      {/* viewer + overlays */}
-      <div
-        className={`viewer-container ${drag ? "drag-over" : ""}`}
-        onDragOver={dragOver} onDragLeave={dragLeave} onDrop={drop}
-      >
-        {loading && <div className="loading">Loading…</div>}
-        {error   && <div className="error">{error}</div>}
-
-        <div ref={container} className="ifc-viewer"/>
-
-        {showTree && model && (
+      {/* Left Sidebar - Model Structure */}
+      <div className="left-sidebar">
+        {model && showTree ? (
           <ModelTreePanel 
             components={components}
             model={model} 
             onSelect={selectFromTree}
           />
+        ) : (
+          <div className="sidebar-placeholder">
+            <div className="sidebar-header">
+              <h3>Model Structure</h3>
+            </div>
+            <div className="sidebar-content">
+              <div className="tree-empty">
+                {model ? "Tree hidden" : "No model loaded"}
+              </div>
+            </div>
+          </div>
         )}
+      </div>
 
-        {selectedProps && (
+      {/* Main Content - 3D Viewer */}
+      <div className="main-content">
+        <div
+          className={`viewer-container ${drag ? "drag-over" : ""}`}
+          onDragOver={dragOver} onDragLeave={dragLeave} onDrop={drop}
+        >
+          {loading && <div className="loading">Loading…</div>}
+          {error && <div className="error">{error}</div>}
+
+          <div ref={container} className="ifc-viewer"/>
+        </div>
+      </div>
+
+      {/* Right Sidebar - Properties */}
+      <div className="right-sidebar">
+        {selectedProps ? (
           <div className="properties-panel">
             <div className="properties-header">
-              <h3>Properties</h3><button onClick={() => setProps(null)}>×</button>
+              <h3>Properties</h3>
+              <button onClick={() => setProps(null)}>×</button>
             </div>
             <div className="properties-content">
               {Object.entries(selectedProps).map(([k,v]) => (
@@ -322,6 +342,17 @@ const IFCViewerComponent: React.FC = () => {
                   <span className="property-value">{JSON.stringify(v)}</span>
                 </div>
               ))}
+            </div>
+          </div>
+        ) : (
+          <div className="sidebar-placeholder">
+            <div className="sidebar-header">
+              <h3>Properties</h3>
+            </div>
+            <div className="sidebar-content">
+              <div className="tree-empty">
+                No element selected
+              </div>
             </div>
           </div>
         )}

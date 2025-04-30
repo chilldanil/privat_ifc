@@ -2,7 +2,7 @@
   width: 100%;
   height: 100%;
   overflow: auto;
-  background-color: #f8f9fa;
+  background-color: #ffffff;
   border-radius: 4px;
   border: 1px solid #e9ecef;
   font-size: 14px;
@@ -37,7 +37,7 @@
   border: none;
   cursor: pointer;
   font-size: 10px;
-  color: #495057;
+  color: #000000;
 }
 
 .tree-toggle-placeholder {
@@ -52,12 +52,15 @@
   overflow: hidden;
   text-overflow: ellipsis;
   flex: 1;
+  color: #000000;
+  font-weight: 500;
 }
 
 .tree-item-type {
   font-size: 11px;
-  color: #6c757d;
+  color: #3a3a3a;
   margin-left: 8px;
+  font-weight: 400;
 }
 
 /* Panel for the tree */
@@ -68,7 +71,7 @@
   width: 300px;
   max-height: calc(100vh - 120px);
   background-color: white;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
   border-radius: 8px;
   overflow: hidden;
   display: flex;
@@ -81,14 +84,16 @@
   justify-content: space-between;
   align-items: center;
   padding: 12px 16px;
-  background-color: #f8f9fa;
+  background-color: #3b82f6;
   border-bottom: 1px solid #e9ecef;
+  color: white;
 }
 
 .model-tree-header h3 {
   margin: 0;
   font-size: 16px;
   font-weight: 600;
+  color: #ffffff;
 }
 
 .model-tree-header button {
@@ -96,11 +101,13 @@
   border: none;
   cursor: pointer;
   font-size: 16px;
+  color: #ffffff;
 }
 
 .model-tree-content {
   flex: 1;
   overflow: auto;
+  background-color: #ffffff;
 }
 
 .model-tree-footer {
@@ -108,19 +115,22 @@
   border-top: 1px solid #e9ecef;
   display: flex;
   justify-content: flex-end;
+  background-color: #ffffff;
 }
 
 .model-tree-search {
   padding: 8px 16px;
   border-bottom: 1px solid #e9ecef;
+  background-color: #f8f9fa;
 }
 
 .model-tree-search input {
   width: 100%;
-  padding: 6px 8px;
+  padding: 8px 12px;
   border: 1px solid #ced4da;
   border-radius: 4px;
   font-size: 14px;
+  background-color: #ffffff;
 }
 
 /* Toggle button for tree visibility */
@@ -143,4 +153,11 @@
 
 .tree-toggle-button svg {
   margin-right: 6px;
+}
+
+.tree-loading, .tree-empty {
+  padding: 16px;
+  text-align: center;
+  color: #333333;
+  font-style: italic;
 } 

@@ -348,7 +348,14 @@ const IFCViewerComponent: React.FC = () => {
   /* ──────────────────── render ──────────────────── */
   return (
     <div className="ifc-viewer-container">
-      {/* toolbar */}
+      {/* 3D Viewer Container - Full Size Background */}
+      <div className="viewer-container">
+        <div ref={container} className="ifc-viewer"/>
+        {loading && <div className="loading">Loading…</div>}
+        {error && <div className="error">{error}</div>}
+      </div>
+
+      {/* Controls - Top Layer */}
       <div className="ifc-controls">
         <button className="back-button" onClick={() => nav("/")}>Back to Home</button>
 
@@ -369,7 +376,7 @@ const IFCViewerComponent: React.FC = () => {
         )}
       </div>
 
-      {/* Main layout with resizable panels */}
+      {/* Main Layout - Overlay Layer */}
       <div
         ref={mainLayoutRef}
         className={`viewer-layout ${drag ? "drag-over" : ""}`}
@@ -405,24 +412,14 @@ const IFCViewerComponent: React.FC = () => {
         {/* Left Divider */}
         <div
           className="panel-divider"
+          style={{ left: `${leftPanelWidth}%` }}
           onMouseDown={handleMouseDown('left')}
         />
-
-        {/* Main Content - 3D Viewer */}
-        <div className="main-content">
-          <div
-            className="viewer-container"
-          >
-            {loading && <div className="loading">Loading…</div>}
-            {error && <div className="error">{error}</div>}
-
-            <div ref={container} className="ifc-viewer"/>
-          </div>
-        </div>
 
         {/* Right Divider */}
         <div
           className="panel-divider"
+          style={{ right: `${rightPanelWidth}%` }}
           onMouseDown={handleMouseDown('right')}
         />
 

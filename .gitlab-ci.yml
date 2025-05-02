@@ -1,0 +1,14 @@
+image: node:lts
+
+pages:
+  stage: deploy
+  script:
+    - npm ci
+    - npm run build
+    - mkdir -p public
+    - cp -r dist/* public/
+  artifacts:
+    paths:
+      - public
+  only:
+    - main 

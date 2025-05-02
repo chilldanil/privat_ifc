@@ -53,6 +53,7 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
   const [isLoading, setIsLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [filteredTreeData, setFilteredTreeData] = useState<TreeNode[]>([]);
+  const [expanded, setExpanded] = useState<number[]>([]);
 
   // Load spatial structure when model changes
   useEffect(() => {
@@ -110,6 +111,19 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
         const tree = convertClassifierToTree(classifier, nameMap);
         setTreeData(tree);
         setFilteredTreeData(tree);
+        
+        // Collect all node IDs for auto-expansion
+        const allNodeIds: number[] = [];
+        const collectNodeIds = (nodes: TreeNode[]) => {
+          nodes.forEach(node => {
+            allNodeIds.push(node.id);
+            if (node.children.length > 0) {
+              collectNodeIds(node.children);
+            }
+          });
+        };
+        collectNodeIds(tree);
+        setExpanded(allNodeIds);
       } 
       catch (error) {
         console.error('Error building spatial structure:', error);
@@ -182,13 +196,13 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
   return (
     <div className="model-tree-panel">
       <div className="model-tree-header">
-        <h3>Model Structure</h3>
+        <h3>Parts</h3>
       </div>
       
       <div className="model-tree-search">
         <input
           type="text"
-          placeholder="Search..."
+          placeholder="Search parts..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
         />
@@ -201,6 +215,7 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
           <TreeView 
             data={filteredTreeData} 
             onSelectItem={handleSelectItem}
+            defaultExpanded={expanded}
           />
         ) : (
           <div className="tree-empty">
@@ -298,7 +313,23 @@ function convertClassifierToTree(
     }
   }
 
-  // ---- Step 3: Group elements by type under each spatial structure -------------
+  // ---- NEW Step 3: LINK SPATIAL NODES TO THEIR PARENTS ------------------
+  // A spatial node A is a child of another spatial node B
+  // IFF B's _elementIds set contains A.id.
+  spatialNodes.forEach(parent => {
+    const ids = (parent as EnhancedTreeNode)._elementIds;
+    if (!ids) return;
+    
+    ids.forEach(id => {
+      const maybeChild = spatialNodes.get(id);
+      if (maybeChild) {
+        parent.children.push(maybeChild);   // nest the child
+        ids.delete(id);                    // keep only element IDs
+      }
+    });
+  });
+
+  // ---- Step 4: Group elements by type under each spatial structure -------------
   // Process each spatial node
   spatialNodes.forEach(spatialNode => {
     const typeGroups: Record<string, TreeNode> = {};
@@ -308,43 +339,41 @@ function convertClassifierToTree(
     // Process each entity type
     let typeCounter = 0;
     for (const entityType in entityClassification) {
-      const entities = entityClassification[entityType];
-      if (!Array.isArray(entities)) continue;
-      
-      // Find elements of this type that belong to this spatial node
+      const entityGroup: any = entityClassification[entityType];
+      if (!entityGroup?.map) continue;
+
       const typeElements: TreeNode[] = [];
-      
-      entities.forEach(entity => {
-        const eid = entity.expressID;
-        if (elementIds.has(eid)) {
-          // Get the node we created earlier or create a new one
-          const elementNode = elementNodes.get(eid) || {
-            id: eid,
-            expressID: eid,
-            name: nameMap[eid] || `${getTypeName(entityType)} ${eid}`,
-            type: getTypeName(entityType),
-            children: []
-          };
-          
-          // Update type if we have better info from entity classification
-          elementNode.type = getTypeName(entityType);
-          typeElements.push(elementNode);
+
+      // Walk through fragment IDs -> expressID sets
+      for (const fragID in entityGroup.map) {
+        for (const eid of entityGroup.map[fragID] as Set<number>) {
+          if (!elementIds.has(eid)) continue; // belongs to another spatial node
+
+          const node =
+            elementNodes.get(eid) ?? {
+              id: eid,
+              expressID: eid,
+              name: nameMap[eid] ?? `${getTypeName(entityType)} ${eid}`,
+              type: getTypeName(entityType),
+              children: []
+            };
+
+          elementNodes.set(eid, node);
+          typeElements.push(node);
         }
-      });
-      
-      // If we found elements of this type, create a type group
-      if (typeElements.length > 0) {
-        const friendlyTypeName = getTypeName(entityType);
+      }
+
+      if (typeElements.length) {
         typeCounter += 1;
-        const typeGroupNumericId = -(spatialId * 1000 + typeCounter);
-        
-        // Create a group node for this type
+        const friendlyTypeName = getTypeName(entityType);
+        const groupId = -(spatialId * 1000 + typeCounter);
+
         typeGroups[entityType] = {
-          id: typeGroupNumericId,
+          id: groupId,
+          expressID: groupId,
           name: `${getTypePluralName(friendlyTypeName)} (${typeElements.length})`,
           type: `${friendlyTypeName}Group`,
-          children: typeElements,
-          expressID: typeGroupNumericId  // Same as id to avoid selection issues
+          children: typeElements.sort((a, b) => a.name.localeCompare(b.name))
         };
       }
     }
@@ -355,17 +384,27 @@ function convertClassifierToTree(
     });
     
     // Replace the spatial node's children with the type groups
-    spatialNode.children = Object.values(typeGroups).sort((a, b) => 
+    // We need to add the type groups to the existing children (which now contain nested spatial nodes)
+    spatialNode.children = [...spatialNode.children, ...Object.values(typeGroups).sort((a, b) => 
       a.name.localeCompare(b.name)
-    );
+    )];
     
-    // Remove the tracking set
+    // Now it's safe to remove the tracking set
     delete (spatialNode as any)._elementIds;
   });
 
-  // ---- Step 4: Build a hierarchy of spatial structure nodes -------------
+  // ---- Step 5: Sort spatial structure nodes -------------
   // Sort roots by type priority (Project -> Site -> Building -> Storey, etc.)
-  const roots: TreeNode[] = Array.from(spatialNodes.values());
+  const roots: TreeNode[] = Array.from(spatialNodes.values()).filter(node => {
+    // Find nodes that aren't children of any other node
+    for (const potentialParent of spatialNodes.values()) {
+      if (potentialParent !== node && potentialParent.children.includes(node)) {
+        return false; // This node is a child of another spatial node
+      }
+    }
+    return true; // This node isn't a child of any other node, so it's a root
+  });
+  
   const typePriority: Record<string, number> = {
     'Project': 1,
     'Site': 2,
@@ -374,25 +413,7 @@ function convertClassifierToTree(
     'Space': 5
   };
   
-  // ---- Step 5: LINK SPATIAL NODES TO THEIR PARENTS ------------------
-  // A spatial node A is a child of another spatial node B
-  // IFF B's _elementIds set contains A.id.
-  spatialNodes.forEach(childNode => {
-    const childId = childNode.id;
-    spatialNodes.forEach(parentNode => {
-      if (parentNode === childNode) return;
-      const ids = (parentNode as EnhancedTreeNode)._elementIds as Set<number>;
-      if (ids?.has(childId)) {
-        // Remove the ID from parent's element set (so it doesn't become a leaf)
-        ids.delete(childId);
-        // Attach child under parent if not already there
-        if (!parentNode.children.includes(childNode)) {
-          parentNode.children.push(childNode);
-        }
-      }
-    });
-  });
-  
+  // Sort roots by priority
   roots.sort((a, b) => {
     const priorityA = typePriority[a.type || ''] || 100;
     const priorityB = typePriority[b.type || ''] || 100;

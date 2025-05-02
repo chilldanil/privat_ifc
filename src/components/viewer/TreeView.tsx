@@ -12,6 +12,7 @@ export interface TreeNode {
 interface TreeViewProps {
   data: TreeNode[];
   onSelectItem: (id: number) => void;
+  defaultExpanded?: number[];
 }
 
 // Individual tree item component (recursive)
@@ -19,8 +20,11 @@ const TreeItem: React.FC<{
   node: TreeNode;
   onSelectItem: (id: number) => void;
   level: number;
-}> = ({ node, onSelectItem, level }) => {
-  const [isOpen, setIsOpen] = useState(level < 1); // Auto-expand first level
+  defaultExpanded?: number[];
+}> = ({ node, onSelectItem, level, defaultExpanded }) => {
+  const [isOpen, setIsOpen] = useState(
+    level < 1 || (defaultExpanded?.includes(node.id) ?? false)
+  ); // Auto-expand first level or if in defaultExpanded
   
   const hasChildren = node.children && node.children.length > 0;
   const indent = level * 16; // Indentation per level
@@ -67,6 +71,7 @@ const TreeItem: React.FC<{
               node={child} 
               onSelectItem={onSelectItem} 
               level={level + 1} 
+              defaultExpanded={defaultExpanded}
             />
           ))}
         </div>
@@ -76,7 +81,7 @@ const TreeItem: React.FC<{
 };
 
 // Main TreeView component
-const TreeView: React.FC<TreeViewProps> = ({ data, onSelectItem }) => {
+const TreeView: React.FC<TreeViewProps> = ({ data, onSelectItem, defaultExpanded }) => {
   return (
     <div className="tree-view">
       <div className="tree-container">
@@ -86,6 +91,7 @@ const TreeView: React.FC<TreeViewProps> = ({ data, onSelectItem }) => {
             node={node} 
             onSelectItem={onSelectItem} 
             level={0} 
+            defaultExpanded={defaultExpanded}
           />
         ))}
       </div>

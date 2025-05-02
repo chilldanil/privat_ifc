@@ -12,14 +12,20 @@ import {
   Typography, 
   Divider,
   Paper,
-  IconButton
+  IconButton,
+  ToggleButton,
+  ToggleButtonGroup
 } from "@mui/material";
 import ArrowBackIcon from "@mui/icons-material/ArrowBack";
 import UploadIcon from "@mui/icons-material/Upload";
 import VisibilityIcon from "@mui/icons-material/Visibility";
 import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
 import CloseIcon from "@mui/icons-material/Close";
+import ListIcon from "@mui/icons-material/List";
+import AccountTreeIcon from "@mui/icons-material/AccountTree";
 import ModelTreePanel from "./ModelTreePanel";
+import RelationsTreePanel from "./RelationsTreePanel";
+import PropertyList from "./PropertyList";
 
 import "../../styles/IFCViewerComponent.css";
 import "../../styles/TreeView.css";
@@ -41,6 +47,7 @@ const IFCViewerComponent: React.FC = () => {
   const [error,   setError]         = useState<string | null>(null);
   const [drag,    setDrag]          = useState(false);
   const [showTree, setShowTree]     = useState(true);
+  const [treeViewType, setTreeViewType] = useState<'classic' | 'relations'>('classic');
 
   // State for panel widths and dragging status
   const [leftPanelWidth, setLeftPanelWidth] = useState(20); // Initial width in percentage
@@ -161,11 +168,40 @@ const IFCViewerComponent: React.FC = () => {
         true
       );
 
+      // First set the model in state
       setModel(grp);
-      components.get(OBC.Classifier).byEntity(grp);
+      
+      // Then run classification and indexing
+      const classifier = components.get(OBC.Classifier);
+      const indexer = components.get(OBC.IfcRelationsIndexer);
+      
+      try {
+        // Process relations for the Relations Tree
+        if (grp.hasProperties) {
+          await indexer.process(grp);
+          console.log("Relations indexed successfully");
+        }
+        
+        // Classify by entity (for the classic tree view)
+        await classifier.byEntity(grp);
+        
+        // Also try to classify by spatial structure
+        try {
+          await classifier.bySpatialStructure(grp);
+        } catch (error) {
+          console.warn("Couldn't classify by spatial structure:", error);
+        }
+      } catch (e) {
+        console.error("Error during model processing:", e);
+      }
     }
-    catch (e) { setError("Failed to load IFC (is it valid?)"); }
-    finally  { setLoading(false); }
+    catch (e) { 
+      console.error("Failed to load IFC:", e);
+      setError("Failed to load IFC (is it valid?)"); 
+    }
+    finally { 
+      setLoading(false); 
+    }
   };
 
   /* ──────────────────── tree click → highlight ──────────────────── */
@@ -363,268 +399,318 @@ const IFCViewerComponent: React.FC = () => {
   /* ──────────────────── render ──────────────────── */
   const APPBAR_HEIGHT = 64; // default Material AppBar height
   return (
-    <Box className="ifc-viewer-container" sx={{ position: "relative", width: "100%", height: `calc(100vh - ${APPBAR_HEIGHT}px)` }}>
-      {/* 3D Viewer Container - Full Size Background */}
-      <Box 
-        className="viewer-container" 
-        sx={{ 
-          position: "absolute", 
-          top: 0, 
-          left: 0, 
-          right: 0, 
-          bottom: 0,
-          paddingTop: "64px", // Add padding for the fixed toolbar 
-          zIndex: 0
-        }}
-        onDragOver={dragOver}
-        onDragLeave={dragLeave}
-        onDrop={drop}
-      >
-        <Box ref={container} className="ifc-viewer" sx={{ width: "100%", height: "100%" }} />
-        {loading && (
-          <Box 
-            sx={{ 
-              position: "absolute", 
-              top: "50%", 
-              left: "50%", 
-              transform: "translate(-50%, -50%)", 
-              display: "flex", 
-              flexDirection: "column", 
-              alignItems: "center" 
-            }}
-          >
-            <CircularProgress color="primary" />
-            <Typography sx={{ mt: 2 }}>Loading…</Typography>
-          </Box>
-        )}
-        {error && (
-          <Box sx={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)" }}>
-            <Alert severity="error" sx={{ boxShadow: 3 }}>{error}</Alert>
-          </Box>
-        )}
-      </Box>
-
-      {/* Controls - Top Layer */}
-      <Box 
-        className="ifc-controls" 
-        sx={{ 
-          position: "fixed", 
-          top: 0,
-          left: 0,
-          right: 0,
-          padding: "1rem",
-          zIndex: 100,
-          display: "flex",
-          gap: 2,
-          pointerEvents: "auto",
-          backgroundColor: "rgba(26, 26, 26, 0.95)",
-          borderBottom: "1px solid #333",
-          boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)"
-        }}
-      >
-        <Button 
-          variant="contained" 
-          startIcon={<ArrowBackIcon />}
-          onClick={() => nav("/")}
+    <Box 
+      ref={mainLayoutRef}
+      sx={{ 
+        height: '100vh', 
+        display: 'flex', 
+        flexDirection: 'column',
+        position: 'relative',
+        overflow: 'hidden'
+      }}
+    >
+      {/* Header bar */}
+      <Box sx={{ 
+        height: '3rem', 
+        display: 'flex', 
+        alignItems: 'center', 
+        px: 2,
+        borderBottom: '1px solid',
+        borderColor: 'divider',
+        backgroundColor: 'background.paper',
+        zIndex: 10
+      }}>
+        <IconButton 
+          onClick={() => nav('/')}
+          aria-label="back to home"
+          sx={{ mr: 2 }}
         >
-          Back
-        </Button>
+          <ArrowBackIcon />
+        </IconButton>
+        
+        <Typography variant="h6" component="h1" sx={{ flexGrow: 1 }}>
+          IFC Viewer
+        </Typography>
+        
+        {model ? (
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <ToggleButtonGroup
+              value={treeViewType}
+              exclusive
+              onChange={(e, newValue) => {
+                if (newValue) setTreeViewType(newValue);
+              }}
+              size="small"
+              aria-label="tree view type"
+            >
+              <ToggleButton value="classic" aria-label="classic tree">
+                <ListIcon fontSize="small" />
+              </ToggleButton>
+              <ToggleButton value="relations" aria-label="relations tree">
+                <AccountTreeIcon fontSize="small" />
+              </ToggleButton>
+            </ToggleButtonGroup>
 
-        <Button
-          variant="contained"
-          component="label"
-          startIcon={<UploadIcon />}
-        >
-          Upload IFC
-          <input
-            type="file"
-            accept=".ifc"
-            hidden
-            onChange={(e) => e.target.files?.[0] && loadIfc(e.target.files[0])}
-          />
-        </Button>
-
-        {model && (
-          <Button 
+            <Button 
+              onClick={() => setShowTree(!showTree)}
+              startIcon={showTree ? <VisibilityOffIcon /> : <VisibilityIcon />}
+              variant="outlined"
+              size="small"
+            >
+              {showTree ? 'Hide' : 'Show'} Tree
+            </Button>
+          </Box>
+        ) : (
+          <Button
+            onClick={() => document.getElementById('ifc-file-input')?.click()}
+            startIcon={<UploadIcon />}
             variant="contained"
-            startIcon={showTree ? <VisibilityOffIcon /> : <VisibilityIcon />}
-            onClick={() => setShowTree(!showTree)}
           >
-            {showTree ? "Hide Tree" : "Show Tree"}
+            Load IFC
           </Button>
         )}
       </Box>
-
-      {/* Main Layout - Overlay Layer */}
-      <Box
-        ref={mainLayoutRef}
-        sx={{
-          position: "absolute",
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          paddingTop: "64px", // Add padding to account for fixed toolbar
-          display: "flex",
-          zIndex: 5,
-          border: drag ? "2px dashed rgba(0, 120, 212, 0.7)" : "none",
-          backgroundColor: drag ? "rgba(0, 120, 212, 0.1)" : "transparent",
-          pointerEvents: "none" // allow clicks to pass through by default
+      
+      {/* Main content */}
+      <Box 
+        sx={{ 
+          flexGrow: 1, 
+          display: 'flex', 
+          position: 'relative',
+          overflow: 'hidden'
         }}
       >
-        {/* Left Sidebar - Model Structure */}
-        <Paper 
-          elevation={3}
+        {/* Left panel (tree view) */}
+        {showTree && model && (
+          <>
+            <Box 
+              id="left-panel"
+              sx={{ 
+                height: '100%', 
+                width: `${leftPanelWidth}%`,
+                minWidth: '200px',
+                maxWidth: '500px',
+                position: 'relative',
+                borderRight: '1px solid',
+                borderColor: 'divider'
+              }}
+            >
+              {treeViewType === 'classic' ? (
+                <ModelTreePanel
+                  components={components}
+                  model={model}
+                  onSelect={selectFromTree}
+                />
+              ) : (
+                <RelationsTreePanel
+                  components={components}
+                  model={model}
+                  onSelect={selectFromTree}
+                />
+              )}
+              
+              {/* Resize handle */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  right: -4,
+                  width: 8,
+                  height: '100%',
+                  cursor: 'col-resize',
+                  zIndex: 100,
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                  }
+                }}
+                onMouseDown={handleMouseDown('left')}
+              />
+            </Box>
+          </>
+        )}
+        
+        {/* 3D Viewer */}
+        <Box 
           sx={{ 
-            width: `${leftPanelWidth}%`,
-            height: "100%",
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-            borderRadius: 0,
-            pointerEvents: "auto" // re-enable interactions
+            flexGrow: 1, 
+            position: 'relative',
+            height: '100%'
           }}
         >
-          {model && showTree ? (
-            <ModelTreePanel 
-              components={components}
-              model={model} 
-              onSelect={selectFromTree}
-            />
-          ) : (
-            <Box sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: "medium" }}>
-                Model Structure
-              </Typography>
-              <Box 
-                sx={{ 
-                  flexGrow: 1, 
-                  display: "flex", 
-                  alignItems: "center", 
-                  justifyContent: "center",
-                  color: "text.secondary" 
+          <Box 
+            ref={container}
+            sx={{ 
+              width: '100%', 
+              height: '100%',
+              position: 'relative'
+            }}
+            onDragOver={dragOver}
+            onDragLeave={dragLeave}
+            onDrop={drop}
+          >
+            {/* Drag overlay */}
+            {drag && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: 'rgba(0, 0, 0, 0.5)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 50
                 }}
               >
-                <Typography>
-                  {model ? "Tree hidden" : "No model loaded"}
-                </Typography>
+                <Paper 
+                  elevation={3}
+                  sx={{ p: 3, textAlign: 'center' }}
+                >
+                  <UploadIcon sx={{ fontSize: 48, mb: 2, color: 'primary.main' }} />
+                  <Typography variant="h6">Drop IFC file to load</Typography>
+                </Paper>
               </Box>
-            </Box>
-          )}
-        </Paper>
-
-        {/* Left Divider */}
-        <Box
-          sx={{
-            position: "absolute",
-            left: `${leftPanelWidth}%`,
-            top: 0,
-            bottom: 0,
-            width: "6px",
-            backgroundColor: "rgba(0, 0, 0, 0.1)",
-            cursor: "col-resize",
-            zIndex: 15,
-            transform: "translateX(-50%)",
-            "&:hover": {
-              backgroundColor: "primary.main",
-              opacity: 0.7
-            },
-            pointerEvents: "auto"
-          }}
-          onMouseDown={handleMouseDown('left')}
-        />
-
-        {/* Right Divider */}
-        <Box
-          sx={{
-            position: "absolute",
-            right: `${rightPanelWidth}%`,
-            top: 0,
-            bottom: 0,
-            width: "6px",
-            backgroundColor: "rgba(0, 0, 0, 0.1)",
-            cursor: "col-resize",
-            zIndex: 15,
-            transform: "translateX(50%)",
-            "&:hover": {
-              backgroundColor: "primary.main",
-              opacity: 0.7
-            },
-            pointerEvents: "auto"
-          }}
-          onMouseDown={handleMouseDown('right')}
-        />
-
-        {/* Right Sidebar - Properties */}
-        <Paper
-          elevation={3}
-          sx={{ 
-            width: `${rightPanelWidth}%`,
-            height: "100%",
-            position: "absolute",
-            right: 0,
-            overflow: "hidden",
-            display: "flex",
-            flexDirection: "column",
-            borderRadius: 0,
-            pointerEvents: "auto"
-          }}
-        >
-          {selectedProps ? (
-            <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+            )}
+            
+            {/* Loading overlay */}
+            {loading && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
+                  width: '100%',
+                  height: '100%',
+                  backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  zIndex: 50
+                }}
+              >
+                <Paper 
+                  elevation={3}
+                  sx={{ p: 3, textAlign: 'center' }}
+                >
+                  <CircularProgress sx={{ mb: 2 }} />
+                  <Typography>Loading IFC model...</Typography>
+                </Paper>
+              </Box>
+            )}
+            
+            {/* Error message */}
+            {error && (
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 16,
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  zIndex: 50
+                }}
+              >
+                <Alert 
+                  severity="error"
+                  onClose={() => setError(null)}
+                >
+                  {error}
+                </Alert>
+              </Box>
+            )}
+          </Box>
+        </Box>
+        
+        {/* Right panel (properties) */}
+        {selectedProps && (
+          <>
+            <Box 
+              id="right-panel"
+              sx={{ 
+                height: '100%', 
+                width: `${rightPanelWidth}%`,
+                minWidth: '200px',
+                maxWidth: '500px',
+                position: 'relative',
+                borderLeft: '1px solid',
+                borderColor: 'divider',
+                display: 'flex',
+                flexDirection: 'column',
+                overflow: 'hidden'
+              }}
+            >
               <Box sx={{ 
-                display: "flex", 
-                alignItems: "center", 
-                justifyContent: "space-between",
-                p: 2,
-                borderBottom: "1px solid",
-                borderColor: "divider"
+                p: 2, 
+                borderBottom: '1px solid', 
+                borderColor: 'divider',
+                display: 'flex',
+                alignItems: 'center'
               }}>
-                <Typography variant="h6">Properties</Typography>
-                <IconButton size="small" onClick={() => setProps(null)}>
+                <Typography variant="h6" sx={{ flexGrow: 1 }}>Properties</Typography>
+                <IconButton onClick={() => {
+                  if (highlighter.current) highlighter.current.clear('selection');
+                  if (outliner.current) outliner.current.clear('selection');
+                  setProps(null);
+                }}>
                   <CloseIcon />
                 </IconButton>
               </Box>
+              
               <Box sx={{ 
                 p: 2, 
-                overflowY: "auto", 
-                flexGrow: 1 
+                overflow: 'auto',
+                flexGrow: 1
               }}>
-                {Object.entries(selectedProps).map(([k,v]) => (
-                  <Box key={k} sx={{ mb: 1.5 }}>
-                    <Typography variant="subtitle2" color="primary" sx={{ fontWeight: "medium" }}>
-                      {k}:
-                    </Typography>
-                    <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
-                      {JSON.stringify(v)}
-                    </Typography>
-                    <Divider sx={{ mt: 1 }} />
-                  </Box>
-                ))}
+                <PropertyList properties={selectedProps} />
               </Box>
-            </Box>
-          ) : (
-            <Box sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}>
-              <Typography variant="h6" sx={{ mb: 2, fontWeight: "medium" }}>
-                Properties
-              </Typography>
-              <Box 
-                sx={{ 
-                  flexGrow: 1, 
-                  display: "flex", 
-                  alignItems: "center", 
-                  justifyContent: "center",
-                  color: "text.secondary"
+              
+              {/* Resize handle */}
+              <Box
+                sx={{
+                  position: 'absolute',
+                  top: 0,
+                  left: -4,
+                  width: 8,
+                  height: '100%',
+                  cursor: 'col-resize',
+                  zIndex: 100,
+                  '&:hover': {
+                    backgroundColor: 'rgba(0, 0, 0, 0.1)',
+                  }
                 }}
-              >
-                <Typography>
-                  No element selected
-                </Typography>
-              </Box>
+                onMouseDown={handleMouseDown('right')}
+              />
             </Box>
-          )}
-        </Paper>
+          </>
+        )}
       </Box>
+      
+      {/* Hidden file input for IFC loading */}
+      <input
+        id="ifc-file-input"
+        type="file"
+        accept=".ifc"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) {
+            setModel(null); // Clear previous model
+            setProps(null); // Clear properties
+            if(highlighter.current) highlighter.current.clear('selection'); // Clear highlight
+            if(outliner.current) outliner.current.clear('selection'); // Clear outline
+            if (world) { // Remove previous model from scene
+                world.scene.three.children.forEach(child => {
+                  if (child instanceof FragmentsGroup) {
+                    world.scene.three.remove(child);
+                  }
+                });
+            }
+            loadIfc(file);
+          }
+          e.target.value = '';
+        }}
+        style={{ display: 'none' }}
+      />
     </Box>
   );
 };

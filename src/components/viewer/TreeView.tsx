@@ -43,8 +43,15 @@ const TreeItem: React.FC<{
         {!hasChildren && <span className="tree-toggle-placeholder"></span>}
         
         <span 
-          className="tree-item-label"
-          onClick={() => onSelectItem(node.expressID || node.id)}
+          className={`tree-item-label ${hasChildren ? 'folder' : 'leaf'}`}
+          onClick={() => {
+            const eid = node.expressID ?? node.id;
+            // Highlight if it corresponds to a *real* IFC object
+            if (eid > 0) {
+              onSelectItem(eid);
+            }
+          }}
+          data-selectable={(node.expressID ?? node.id) > 0 ? "true" : "false"}
           title={node.type ? `${node.name} (${node.type})` : node.name}
         >
           {node.name}

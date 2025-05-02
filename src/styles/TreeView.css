@@ -56,6 +56,26 @@
   font-weight: 500;
 }
 
+/* Style for folder vs leaf nodes */
+.tree-item-label.folder {
+  font-weight: 600;
+  color: #333333;
+}
+
+/* Style for leaf nodes */
+.tree-item-label.leaf {
+  font-weight: 400;
+}
+
+/* Common hover styles for any selectable node */
+.tree-item-label[data-selectable="true"]:hover,
+.tree-item-label.folder:hover,
+.tree-item-label.leaf:hover {
+  text-decoration: underline;
+  color: #3b82f6;
+  cursor: pointer;
+}
+
 .tree-item-type {
   font-size: 11px;
   color: #3a3a3a;

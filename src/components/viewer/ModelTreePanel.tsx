@@ -31,6 +31,19 @@ const IFC_TYPES: Record<string, string> = {
   'IFCPLATE': 'Plate',
 };
 
+// Convert singular type names to plural for group labels
+function getTypePluralName(typeName: string): string {
+  if (typeName.endsWith('y')) {
+    return typeName.slice(0, -1) + 'ies';
+  }
+  return typeName + 's';
+}
+
+// Update the TreeNode interface to allow our _elementIds property
+interface EnhancedTreeNode extends TreeNode {
+  _elementIds?: Set<number>;
+}
+
 const ModelTreePanel: React.FC<ModelTreePanelProps> = ({ 
   components,
   model, 
@@ -56,7 +69,45 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
         
         /* 2️⃣ Now classifier can group by spatialStructure */
         await classifier.bySpatialStructure(model);
-        const tree = convertClassifierToTree(classifier);
+        
+        /* 3️⃣ Also classify by entity type for grouping */
+        await classifier.byEntity(model);
+        
+        /* 4️⃣ Collect all unique expressIDs */
+        const allIds = new Set<number>();
+        
+        // Add IDs from spatial structures
+        if (classifier.list.spatialStructures) {
+          Object.values(classifier.list.spatialStructures).forEach(group => {
+            Object.values(group.map).forEach(idSet => {
+              idSet.forEach(id => allIds.add(id));
+            });
+          });
+        }
+        
+        /* 5️⃣ Fetch properties for all IDs */
+        console.log(`Fetching properties for ${allIds.size} elements...`);
+        const nameMap: Record<number, string> = {};
+        
+        // Use Promise.all for parallel fetching, but limit batch size to avoid overwhelming
+        const batchSize = 100;
+        const idsArray = Array.from(allIds);
+        
+        for (let i = 0; i < idsArray.length; i += batchSize) {
+          const batch = idsArray.slice(i, i + batchSize);
+          await Promise.all(batch.map(async id => {
+            try {
+              const props = await model.getProperties(id);
+              nameMap[id] = props?.Name?.value || `Element ${id}`;
+            } catch (err) {
+              console.warn(`Could not get properties for element ${id}:`, err);
+              nameMap[id] = `Element ${id}`;
+            }
+          }));
+        }
+        
+        /* 6️⃣ Build the tree with our enhanced data */
+        const tree = convertClassifierToTree(classifier, nameMap);
         setTreeData(tree);
         setFilteredTreeData(tree);
       } 
@@ -66,7 +117,8 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
         // Fallback to entity classification if spatial structure fails
         try {
           await classifier.byEntity(model);
-          const tree = convertClassifierToTree(classifier);
+          const nameMap: Record<number, string> = {};
+          const tree = convertClassifierToTree(classifier, nameMap);
           setTreeData(tree);
           setFilteredTreeData(tree);
         } 
@@ -167,12 +219,18 @@ const safeNumber = (value: string): number | undefined => {
 };
 
 // Function to convert classifier data to TreeNode structure
-function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
+function convertClassifierToTree(
+  classifier: OBC.Classifier,
+  nameMap: Record<number, string>
+): TreeNode[] {
   const systems = classifier.list.spatialStructures;
   if (!systems) return [];
 
   // Debug output
-  console.log("Spatial structures:", JSON.stringify(classifier.list.spatialStructures, null, 2));
+  console.log("Building tree with spatial structures...");
+
+  // Get entity classifications first so we can find the project info
+  const entityClassification = classifier.list.entities;
 
   // ---- Step 1: Create spatial structure nodes (by group ID) -------------
   const spatialNodes = new Map<number, TreeNode>();
@@ -189,12 +247,13 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
         expressID: groupID,
         name: groupName || `Group ${groupID}`,
         type: getTypeName(groupName),
-        children: []
-      });
+        children: [],
+        _elementIds: new Set<number>() // Track all elements under this spatial node
+      } as EnhancedTreeNode);
     }
   }
 
-  // ---- Step 2: Create and assign element nodes to their spatial parents -------------
+  // ---- Step 2: Collect elements for each spatial structure -------------
   for (const groupName in systems) {
     const group = systems[groupName];
     const parentID = group.id;
@@ -202,15 +261,16 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
     if (parentID === undefined || parentID === null) continue;
     
     // Get the parent node (create it if it doesn't exist)
-    let parentNode = spatialNodes.get(parentID);
+    let parentNode = spatialNodes.get(parentID) as EnhancedTreeNode | undefined;
     if (!parentNode) {
       parentNode = {
         id: parentID,
         expressID: parentID,
         name: groupName || `Group ${parentID}`,
         type: getTypeName(groupName),
-        children: []
-      };
+        children: [],
+        _elementIds: new Set<number>()
+      } as EnhancedTreeNode;
       spatialNodes.set(parentID, parentNode);
     }
     
@@ -220,76 +280,92 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
         // Skip if this is a spatial structure node (already handled)
         if (spatialNodes.has(eid)) continue;
         
+        // Add this element ID to the parent's tracking set
+        (parentNode as any)._elementIds.add(eid);
+        
         // Create element node if it doesn't exist
         if (!elementNodes.has(eid)) {
-          // Try to get element type from the entity list
-          let elementType = 'Element';
-          let elementName = `Element ${eid}`;
-          
-          // Look up this element in the entity list to get its type
-          try {
-            const entityList = classifier.list.entities;
-            if (entityList) {
-              // Search all entity types
-              for (const entityType in entityList) {
-                const entities = entityList[entityType];
-                if (Array.isArray(entities)) {
-                  // Find this express ID in the entities
-                  const entity = entities.find(e => e.expressID === eid);
-                  if (entity) {
-                    elementType = getTypeName(entityType);
-                    
-                    // Try to get a better name from entity properties
-                    if (entity.Name) {
-                      elementName = entity.Name;
-                    } else if (entity.GlobalId) {
-                      elementName = `${elementType} [${entity.GlobalId}]`;
-                    } else {
-                      elementName = `${elementType} ${eid}`;
-                    }
-                    break;
-                  }
-                }
-              }
-            }
-          } catch (error) {
-            console.warn(`Error getting entity type for ${eid}:`, error);
-          }
-          
           const elementNode: TreeNode = {
             id: eid,
             expressID: eid,
-            name: elementName,
-            type: elementType,
+            name: nameMap[eid] || `Element ${eid}`,
+            type: 'Element',
             children: []
           };
           elementNodes.set(eid, elementNode);
-          
-          // Add element as child to its spatial parent
-          parentNode.children.push(elementNode);
         }
       }
     }
   }
 
-  // Sort elements inside each spatial node by type
-  spatialNodes.forEach(node => {
-    node.children.sort((a, b) => {
-      const typeA = a.type || '';
-      const typeB = b.type || '';
-      if (typeA !== typeB) {
-        return typeA.localeCompare(typeB);
+  // ---- Step 3: Group elements by type under each spatial structure -------------
+  // Process each spatial node
+  spatialNodes.forEach(spatialNode => {
+    const typeGroups: Record<string, TreeNode> = {};
+    const elementIds = (spatialNode as EnhancedTreeNode)._elementIds as Set<number>;
+    const spatialId = typeof spatialNode.id === 'number' ? spatialNode.id : 0;
+    
+    // Process each entity type
+    let typeCounter = 0;
+    for (const entityType in entityClassification) {
+      const entities = entityClassification[entityType];
+      if (!Array.isArray(entities)) continue;
+      
+      // Find elements of this type that belong to this spatial node
+      const typeElements: TreeNode[] = [];
+      
+      entities.forEach(entity => {
+        const eid = entity.expressID;
+        if (elementIds.has(eid)) {
+          // Get the node we created earlier or create a new one
+          const elementNode = elementNodes.get(eid) || {
+            id: eid,
+            expressID: eid,
+            name: nameMap[eid] || `${getTypeName(entityType)} ${eid}`,
+            type: getTypeName(entityType),
+            children: []
+          };
+          
+          // Update type if we have better info from entity classification
+          elementNode.type = getTypeName(entityType);
+          typeElements.push(elementNode);
+        }
+      });
+      
+      // If we found elements of this type, create a type group
+      if (typeElements.length > 0) {
+        const friendlyTypeName = getTypeName(entityType);
+        typeCounter += 1;
+        const typeGroupNumericId = -(spatialId * 1000 + typeCounter);
+        
+        // Create a group node for this type
+        typeGroups[entityType] = {
+          id: typeGroupNumericId,
+          name: `${getTypePluralName(friendlyTypeName)} (${typeElements.length})`,
+          type: `${friendlyTypeName}Group`,
+          children: typeElements,
+          expressID: typeGroupNumericId  // Same as id to avoid selection issues
+        };
       }
-      return a.name.localeCompare(b.name);
+    }
+    
+    // Sort type elements by name
+    Object.values(typeGroups).forEach(group => {
+      group.children.sort((a, b) => a.name.localeCompare(b.name));
     });
+    
+    // Replace the spatial node's children with the type groups
+    spatialNode.children = Object.values(typeGroups).sort((a, b) => 
+      a.name.localeCompare(b.name)
+    );
+    
+    // Remove the tracking set
+    delete (spatialNode as any)._elementIds;
   });
 
-  // ---- Step 3: Build a hierarchy of spatial structure nodes -------------
-  // This would require property metadata about each node to know Project > Site > Building, etc.
-  // For now, we'll just return all spatial nodes as root nodes
-  const roots: TreeNode[] = Array.from(spatialNodes.values());
-  
+  // ---- Step 4: Build a hierarchy of spatial structure nodes -------------
   // Sort roots by type priority (Project -> Site -> Building -> Storey, etc.)
+  const roots: TreeNode[] = Array.from(spatialNodes.values());
   const typePriority: Record<string, number> = {
     'Project': 1,
     'Site': 2,
@@ -298,13 +374,56 @@ function convertClassifierToTree(classifier: OBC.Classifier): TreeNode[] {
     'Space': 5
   };
   
+  // ---- Step 5: LINK SPATIAL NODES TO THEIR PARENTS ------------------
+  // A spatial node A is a child of another spatial node B
+  // IFF B's _elementIds set contains A.id.
+  spatialNodes.forEach(childNode => {
+    const childId = childNode.id;
+    spatialNodes.forEach(parentNode => {
+      if (parentNode === childNode) return;
+      const ids = (parentNode as EnhancedTreeNode)._elementIds as Set<number>;
+      if (ids?.has(childId)) {
+        // Remove the ID from parent's element set (so it doesn't become a leaf)
+        ids.delete(childId);
+        // Attach child under parent if not already there
+        if (!parentNode.children.includes(childNode)) {
+          parentNode.children.push(childNode);
+        }
+      }
+    });
+  });
+  
   roots.sort((a, b) => {
     const priorityA = typePriority[a.type || ''] || 100;
     const priorityB = typePriority[b.type || ''] || 100;
-    return priorityA - priorityB;
+    if (priorityA !== priorityB) {
+      return priorityA - priorityB;
+    }
+    return a.name.localeCompare(b.name);
   });
   
-  return roots;
+  // Find the Project ID and Name
+  let projectId: number | undefined;
+  if (entityClassification && entityClassification.IFCPROJECT && 
+      Array.isArray(entityClassification.IFCPROJECT) && 
+      entityClassification.IFCPROJECT.length > 0) {
+    projectId = entityClassification.IFCPROJECT[0].expressID;
+  }
+  
+  const projectName = projectId
+    ? nameMap[projectId] || `Project ${projectId}`
+    : 'Project';
+  
+  // Build a Project node
+  const projectNode: TreeNode = {
+    id: projectId ?? -1,
+    expressID: projectId ?? -1,
+    name: projectName,
+    type: 'Project',
+    children: roots
+  };
+  
+  return [projectNode];
 }
 
 // Get a friendly type name from IFC type

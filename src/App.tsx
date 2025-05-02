@@ -1,19 +1,17 @@
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom'
-import HomePage from './pages/HomePage'
-import IFCViewerComponent from './components/IFCViewerComponent'
+import { Routes, Route } from 'react-router-dom'
+import LandingPage from './pages/LandingPage'
+import IFCViewerComponent from './components/viewer/IFCViewerComponent'
 import Layout from './components/Layout'
 import './App.css'
 
 const App = () => {
   return (
-    <Router>
-      <Layout>
-        <Routes>
-          <Route path="/" element={<HomePage />} />
-          <Route path="/viewer" element={<IFCViewerComponent />} />
-        </Routes>
-      </Layout>
-    </Router>
+    <Layout>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/viewer" element={<IFCViewerComponent />} />
+      </Routes>
+    </Layout>
   )
 }
 

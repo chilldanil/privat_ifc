@@ -1,6 +1,14 @@
 import { useState, useEffect } from 'react';
 import * as OBC from "@thatopen/components";
 import { FragmentsGroup } from "@thatopen/fragments";
+import { 
+  Box, 
+  Typography, 
+  TextField, 
+  InputAdornment,
+  CircularProgress
+} from '@mui/material';
+import SearchIcon from '@mui/icons-material/Search';
 import TreeView, { TreeNode } from './TreeView';
 import '../../styles/TreeView.css';
 
@@ -194,23 +202,56 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
   };
 
   return (
-    <div className="model-tree-panel">
-      <div className="model-tree-header">
-        <h3>Parts</h3>
-      </div>
-      
-      <div className="model-tree-search">
-        <input
-          type="text"
+    <Box sx={{ 
+      display: 'flex', 
+      flexDirection: 'column', 
+      height: '100%',
+      overflow: 'hidden' 
+    }}>
+      <Box sx={{ 
+        p: 2, 
+        borderBottom: '1px solid', 
+        borderColor: 'divider' 
+      }}>
+        <Typography variant="h6" sx={{ mb: 2 }}>Parts</Typography>
+        
+        <TextField
+          fullWidth
+          size="small"
           placeholder="Search parts..."
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon />
+              </InputAdornment>
+            ),
+          }}
         />
-      </div>
+      </Box>
       
-      <div className="model-tree-content">
+      <Box sx={{ 
+        flexGrow: 1, 
+        overflow: 'auto', 
+        p: 1 
+      }}>
         {isLoading ? (
-          <div className="tree-loading">Loading structure...</div>
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%',
+              flexDirection: 'column',
+              gap: 2
+            }}
+          >
+            <CircularProgress size={24} />
+            <Typography variant="body2" color="text.secondary">
+              Loading structure...
+            </Typography>
+          </Box>
         ) : filteredTreeData.length > 0 ? (
           <TreeView 
             data={filteredTreeData} 
@@ -218,12 +259,21 @@ const ModelTreePanel: React.FC<ModelTreePanelProps> = ({
             defaultExpanded={expanded}
           />
         ) : (
-          <div className="tree-empty">
-            {searchQuery ? 'No results found' : 'No structure available'}
-          </div>
+          <Box 
+            sx={{ 
+              display: 'flex', 
+              justifyContent: 'center', 
+              alignItems: 'center', 
+              height: '100%' 
+            }}
+          >
+            <Typography variant="body2" color="text.secondary">
+              {searchQuery ? 'No results found' : 'No structure available'}
+            </Typography>
+          </Box>
         )}
-      </div>
-    </div>
+      </Box>
+    </Box>
   );
 };
 

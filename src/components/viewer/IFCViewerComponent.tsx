@@ -4,6 +4,21 @@ import * as OBC from "@thatopen/components";
 import * as OBCF from "@thatopen/components-front";
 import * as THREE from "three";
 import { FragmentsGroup, FragmentIdMap } from "@thatopen/fragments";
+import { 
+  Box, 
+  Button, 
+  CircularProgress, 
+  Alert, 
+  Typography, 
+  Divider,
+  Paper,
+  IconButton
+} from "@mui/material";
+import ArrowBackIcon from "@mui/icons-material/ArrowBack";
+import UploadIcon from "@mui/icons-material/Upload";
+import VisibilityIcon from "@mui/icons-material/Visibility";
+import VisibilityOffIcon from "@mui/icons-material/VisibilityOff";
+import CloseIcon from "@mui/icons-material/Close";
 import ModelTreePanel from "./ModelTreePanel";
 
 import "../../styles/IFCViewerComponent.css";
@@ -346,48 +361,129 @@ const IFCViewerComponent: React.FC = () => {
   }, [isDraggingLeft, isDraggingRight, handleMouseMove, handleMouseUp]);
 
   /* ──────────────────── render ──────────────────── */
+  const APPBAR_HEIGHT = 64; // default Material AppBar height
   return (
-    <div className="ifc-viewer-container">
+    <Box className="ifc-viewer-container" sx={{ position: "relative", width: "100%", height: `calc(100vh - ${APPBAR_HEIGHT}px)` }}>
       {/* 3D Viewer Container - Full Size Background */}
-      <div className="viewer-container">
-        <div ref={container} className="ifc-viewer"/>
-        {loading && <div className="loading">Loading…</div>}
-        {error && <div className="error">{error}</div>}
-      </div>
-
-      {/* Controls - Top Layer */}
-      <div className="ifc-controls">
-        <button className="back-button" onClick={() => nav("/")}>Back to Home</button>
-
-        <label className="file-input-container">
-          <span className="file-input-button">Upload IFC File</span>
-          <input
-            type="file"
-            accept=".ifc"
-            className="file-input"
-            onChange={(e) => e.target.files?.[0] && loadIfc(e.target.files[0])}
-          />
-        </label>
-
-        {model && (
-          <button className="tree-button" onClick={() => setShowTree(!showTree)}>
-            {showTree ? "Hide Tree" : "Show Tree"}
-          </button>
-        )}
-      </div>
-
-      {/* Main Layout - Overlay Layer */}
-      <div
-        ref={mainLayoutRef}
-        className={`viewer-layout ${drag ? "drag-over" : ""}`}
+      <Box 
+        className="viewer-container" 
+        sx={{ 
+          position: "absolute", 
+          top: 0, 
+          left: 0, 
+          right: 0, 
+          bottom: 0,
+          paddingTop: "64px", // Add padding for the fixed toolbar 
+          zIndex: 0
+        }}
         onDragOver={dragOver}
         onDragLeave={dragLeave}
         onDrop={drop}
       >
+        <Box ref={container} className="ifc-viewer" sx={{ width: "100%", height: "100%" }} />
+        {loading && (
+          <Box 
+            sx={{ 
+              position: "absolute", 
+              top: "50%", 
+              left: "50%", 
+              transform: "translate(-50%, -50%)", 
+              display: "flex", 
+              flexDirection: "column", 
+              alignItems: "center" 
+            }}
+          >
+            <CircularProgress color="primary" />
+            <Typography sx={{ mt: 2 }}>Loading…</Typography>
+          </Box>
+        )}
+        {error && (
+          <Box sx={{ position: "absolute", bottom: 20, left: "50%", transform: "translateX(-50%)" }}>
+            <Alert severity="error" sx={{ boxShadow: 3 }}>{error}</Alert>
+          </Box>
+        )}
+      </Box>
+
+      {/* Controls - Top Layer */}
+      <Box 
+        className="ifc-controls" 
+        sx={{ 
+          position: "fixed", 
+          top: 0,
+          left: 0,
+          right: 0,
+          padding: "1rem",
+          zIndex: 100,
+          display: "flex",
+          gap: 2,
+          pointerEvents: "auto",
+          backgroundColor: "rgba(26, 26, 26, 0.95)",
+          borderBottom: "1px solid #333",
+          boxShadow: "0 2px 4px rgba(0, 0, 0, 0.2)"
+        }}
+      >
+        <Button 
+          variant="contained" 
+          startIcon={<ArrowBackIcon />}
+          onClick={() => nav("/")}
+        >
+          Back
+        </Button>
+
+        <Button
+          variant="contained"
+          component="label"
+          startIcon={<UploadIcon />}
+        >
+          Upload IFC
+          <input
+            type="file"
+            accept=".ifc"
+            hidden
+            onChange={(e) => e.target.files?.[0] && loadIfc(e.target.files[0])}
+          />
+        </Button>
+
+        {model && (
+          <Button 
+            variant="contained"
+            startIcon={showTree ? <VisibilityOffIcon /> : <VisibilityIcon />}
+            onClick={() => setShowTree(!showTree)}
+          >
+            {showTree ? "Hide Tree" : "Show Tree"}
+          </Button>
+        )}
+      </Box>
+
+      {/* Main Layout - Overlay Layer */}
+      <Box
+        ref={mainLayoutRef}
+        sx={{
+          position: "absolute",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          paddingTop: "64px", // Add padding to account for fixed toolbar
+          display: "flex",
+          zIndex: 5,
+          border: drag ? "2px dashed rgba(0, 120, 212, 0.7)" : "none",
+          backgroundColor: drag ? "rgba(0, 120, 212, 0.1)" : "transparent",
+          pointerEvents: "none" // allow clicks to pass through by default
+        }}
+      >
         {/* Left Sidebar - Model Structure */}
-        <div 
-          className="left-sidebar"
-          style={{ width: `${leftPanelWidth}%` }}
+        <Paper 
+          elevation={3}
+          sx={{ 
+            width: `${leftPanelWidth}%`,
+            height: "100%",
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 0,
+            pointerEvents: "auto" // re-enable interactions
+          }}
         >
           {model && showTree ? (
             <ModelTreePanel 
@@ -396,68 +492,140 @@ const IFCViewerComponent: React.FC = () => {
               onSelect={selectFromTree}
             />
           ) : (
-            <div className="sidebar-placeholder">
-              <div className="sidebar-header">
-                <h3>Model Structure</h3>
-              </div>
-              <div className="sidebar-content">
-                <div className="tree-empty">
+            <Box sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: "medium" }}>
+                Model Structure
+              </Typography>
+              <Box 
+                sx={{ 
+                  flexGrow: 1, 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "center",
+                  color: "text.secondary" 
+                }}
+              >
+                <Typography>
                   {model ? "Tree hidden" : "No model loaded"}
-                </div>
-              </div>
-            </div>
+                </Typography>
+              </Box>
+            </Box>
           )}
-        </div>
+        </Paper>
 
         {/* Left Divider */}
-        <div
-          className="panel-divider"
-          style={{ left: `${leftPanelWidth}%` }}
+        <Box
+          sx={{
+            position: "absolute",
+            left: `${leftPanelWidth}%`,
+            top: 0,
+            bottom: 0,
+            width: "6px",
+            backgroundColor: "rgba(0, 0, 0, 0.1)",
+            cursor: "col-resize",
+            zIndex: 15,
+            transform: "translateX(-50%)",
+            "&:hover": {
+              backgroundColor: "primary.main",
+              opacity: 0.7
+            },
+            pointerEvents: "auto"
+          }}
           onMouseDown={handleMouseDown('left')}
         />
 
         {/* Right Divider */}
-        <div
-          className="panel-divider"
-          style={{ right: `${rightPanelWidth}%` }}
+        <Box
+          sx={{
+            position: "absolute",
+            right: `${rightPanelWidth}%`,
+            top: 0,
+            bottom: 0,
+            width: "6px",
+            backgroundColor: "rgba(0, 0, 0, 0.1)",
+            cursor: "col-resize",
+            zIndex: 15,
+            transform: "translateX(50%)",
+            "&:hover": {
+              backgroundColor: "primary.main",
+              opacity: 0.7
+            },
+            pointerEvents: "auto"
+          }}
           onMouseDown={handleMouseDown('right')}
         />
 
         {/* Right Sidebar - Properties */}
-        <div 
-          className="right-sidebar"
-          style={{ width: `${rightPanelWidth}%` }}
+        <Paper
+          elevation={3}
+          sx={{ 
+            width: `${rightPanelWidth}%`,
+            height: "100%",
+            position: "absolute",
+            right: 0,
+            overflow: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            borderRadius: 0,
+            pointerEvents: "auto"
+          }}
         >
           {selectedProps ? (
-            <div className="properties-panel">
-              <div className="properties-header">
-                <h3>Properties</h3>
-                <button onClick={() => setProps(null)}>×</button>
-              </div>
-              <div className="properties-content">
+            <Box sx={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              <Box sx={{ 
+                display: "flex", 
+                alignItems: "center", 
+                justifyContent: "space-between",
+                p: 2,
+                borderBottom: "1px solid",
+                borderColor: "divider"
+              }}>
+                <Typography variant="h6">Properties</Typography>
+                <IconButton size="small" onClick={() => setProps(null)}>
+                  <CloseIcon />
+                </IconButton>
+              </Box>
+              <Box sx={{ 
+                p: 2, 
+                overflowY: "auto", 
+                flexGrow: 1 
+              }}>
                 {Object.entries(selectedProps).map(([k,v]) => (
-                  <div key={k} className="property-item">
-                    <span className="property-key">{k}:</span>
-                    <span className="property-value">{JSON.stringify(v)}</span>
-                  </div>
+                  <Box key={k} sx={{ mb: 1.5 }}>
+                    <Typography variant="subtitle2" color="primary" sx={{ fontWeight: "medium" }}>
+                      {k}:
+                    </Typography>
+                    <Typography variant="body2" sx={{ wordBreak: "break-word" }}>
+                      {JSON.stringify(v)}
+                    </Typography>
+                    <Divider sx={{ mt: 1 }} />
+                  </Box>
                 ))}
-              </div>
-            </div>
+              </Box>
+            </Box>
           ) : (
-            <div className="sidebar-placeholder">
-              <div className="sidebar-header">
-                <h3>Properties</h3>
-              </div>
-              <div className="sidebar-content">
-                <div className="tree-empty">
+            <Box sx={{ p: 2, height: "100%", display: "flex", flexDirection: "column" }}>
+              <Typography variant="h6" sx={{ mb: 2, fontWeight: "medium" }}>
+                Properties
+              </Typography>
+              <Box 
+                sx={{ 
+                  flexGrow: 1, 
+                  display: "flex", 
+                  alignItems: "center", 
+                  justifyContent: "center",
+                  color: "text.secondary"
+                }}
+              >
+                <Typography>
                   No element selected
-                </div>
-              </div>
-            </div>
+                </Typography>
+              </Box>
+            </Box>
           )}
-        </div>
-      </div>
-    </div>
+        </Paper>
+      </Box>
+    </Box>
   );
 };
 

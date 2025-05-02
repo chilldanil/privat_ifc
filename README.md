@@ -6,7 +6,10 @@ A modern web-based IFC (Industry Foundation Classes) viewer built with React and
 
 - 3D visualization of IFC models
 - Property inspection of model elements
+- Model structure tree view with selectable elements
 - Drag-and-drop file upload
+- Fixed toolbar for easy navigation
+- Resizable panels for model structure and properties
 - Modern landing page
 - Responsive design
 
@@ -15,7 +18,8 @@ A modern web-based IFC (Industry Foundation Classes) viewer built with React and
 - React
 - TypeScript
 - Three.js
-- @thatopen/components
+- @thatopen/components (BIM components)
+- Material-UI
 - Vite
 
 ## Getting Started
@@ -52,15 +56,19 @@ ifc-viewer-project/
 ├── src/
 │   ├── components/
 │   │   ├── viewer/
-│   │   │   └── IFCViewerComponent.tsx
+│   │   │   ├── IFCViewerComponent.tsx
+│   │   │   ├── ModelTreePanel.tsx
+│   │   │   └── TreeView.tsx
+│   │   ├── Layout.tsx
 │   │   ├── pages/
 │   │   │   └── LandingPage.tsx
 │   │   ├── styles/
 │   │   │   ├── IFCViewerComponent.css
-│   │   │   ├── LandingPage.css
-│   │   │   └── style.css
-│   │   ├── main.ts
-│   │   └── ...
+│   │   │   ├── TreeView.css
+│   │   │   └── globalStyles.ts
+│   │   ├── theme.ts
+│   │   ├── main.tsx
+│   │   └── App.tsx
 │   ├── public/
 │   ├── package.json
 │   └── ...
@@ -71,8 +79,20 @@ ifc-viewer-project/
 1. Visit the landing page
 2. Click "Launch Viewer" to open the IFC viewer
 3. Upload an IFC file using the upload button or drag-and-drop
-4. Navigate the 3D model using mouse controls
-5. Click on elements to view their properties
+4. Navigate the 3D model using mouse controls:
+   - Left-click to select elements
+   - Right-click and drag to rotate
+   - Middle-click/scroll to zoom
+   - Left+right click or middle-click to pan
+5. Click on elements to view their properties in the right panel
+6. Use the Model Structure panel to navigate the building hierarchy
+
+## Recent Updates
+
+- Fixed toolbar positioning - now properly fixed to the top of the viewer
+- Added padding to main content to prevent overlap with the fixed toolbar
+- Improved UI consistency and interaction experience
+- Enhanced resizable panels for better workflow
 
 ## License
 

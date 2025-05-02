@@ -8,12 +8,12 @@
 }
 
 .ifc-controls {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     right: 0;
     padding: 1rem;
-    background-color: rgba(26, 26, 26, 0.9);
+    background-color: rgba(26, 26, 26, 0.95);
     border-bottom: 1px solid #333;
     display: flex;
     gap: 1rem;
@@ -221,6 +221,7 @@
     left: 0;
     right: 0;
     bottom: 0;
+    padding-top: 64px; /* Add padding for the fixed toolbar */
     background-color: #2a2a2a;
     z-index: 1; /* Ensure viewer is below overlays but above background */
     pointer-events: auto; /* Enable interaction with viewer */

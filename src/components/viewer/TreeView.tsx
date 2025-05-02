@@ -122,9 +122,9 @@ const TreeItem: React.FC<{
       {hasChildren && (
         <Collapse in={isOpen}>
           <Box>
-            {node.children.map(child => (
+            {node.children.map((child, index) => (
               <TreeItem 
-                key={`${child.id}-${child.name}`} 
+                key={`${child.id}-${child.name}-${index}`} 
                 node={child} 
                 onSelectItem={onSelectItem} 
                 level={level + 1} 
@@ -142,9 +142,9 @@ const TreeItem: React.FC<{
 const TreeView: React.FC<TreeViewProps> = ({ data, onSelectItem, defaultExpanded }) => {
   return (
     <Box sx={{ overflow: 'auto', height: '100%' }}>
-      {data.map(node => (
+      {data.map((node, index) => (
         <TreeItem 
-          key={`${node.id}-${node.name}`} 
+          key={`${node.id}-${node.name}-${index}`} 
           node={node} 
           onSelectItem={onSelectItem} 
           level={0} 
